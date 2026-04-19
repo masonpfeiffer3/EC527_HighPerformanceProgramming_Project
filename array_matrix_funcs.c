@@ -5,9 +5,6 @@
 
 #include "array_matrix_funcs.h"
 
-#define INIT_HIGH 10
-#define INIT_LOW 0
-
 
 // MATRIX STRUCT FUNCTIONS ----- BORROWED FROM PROF. HERBORDT
 
@@ -71,13 +68,13 @@ double fRand(double fMin, double fMax)
 }
 
 /* initialize matrix to rand */
-int init_matrix_rand(matrix_ptr m)
+int init_matrix_rand(matrix_ptr m, double low, double high)
 {
   long int i;
 
   if (m->rowlen > 0 && m->collen > 0) {
     for (i = 0; i < m->rowlen*m->collen; i++) {
-      m->data[i] = (data_t)(fRand(INIT_LOW, INIT_HIGH));
+      m->data[i] = (data_t)(fRand(low, high));
     }
     return 1;
   }
@@ -101,6 +98,10 @@ data_t *get_matrix_start(matrix_ptr m)
 {
   return m->data;
 }
+
+
+
+
 
 
 // ARRAY STRUCT FUNCTIONS  ------ BORROWED FROM PROF. HERBORDT
@@ -161,7 +162,77 @@ int init_array(array_ptr v)
   else return 0;
 }
 
+int init_array_rand(array_ptr v, double low, double high)
+{
+  long int i;
+
+  if (v->len > 0) {
+    for (i = 0; i < v->len; i++) {
+      v->data[i] = (data_t)(fRand(low, high));
+    }
+    return 1;
+  }
+  else return 0;
+}
+
 data_t *get_array_start(array_ptr v)
 {
   return v->data;
+}
+
+
+
+// DATASET FUNC DECLARATIONS
+
+
+dataset_ptr new_dataset(long int len, long int image_len)
+{
+  long int i;
+
+  /* Allocate and declare header structure */
+  dataset_ptr result = (dataset_ptr) malloc(sizeof(dataset));
+  if (!result) return NULL;  /* Couldn't allocate storage */
+  result->len = len;
+  result->image_len = image_len;
+
+  /* Allocate and declare array */
+  if (len > 0) {
+    int* nums = (int*) calloc(len, sizeof(int));   // allocate array for labels
+    if (!nums) {
+      free((void *) result);
+      return NULL;  /* Couldn't allocate storage */
+    }
+
+    result->nums = nums;
+
+    data_t* data = (data_t *) calloc(len*image_len, sizeof(data_t));   // allocate array for pixel values
+    if (!data) {
+      free((void *) result);
+      return NULL;  /* Couldn't allocate storage */
+    }
+
+    result->image_arr = data;
+  }
+  else result->image_arr = NULL;
+
+  return result;
+}
+
+void init_dataset_rand(dataset_ptr d, double low, double high) {
+
+  long int i, j;
+
+  long int len = d->len;
+  long int image_len = d->image_len;
+
+  for (i = 0; i < len; i++) {
+    d->nums[i] = (int)fRand(low, high);
+  }
+
+  for (i = 0; i < len; i++) {
+    for (j = 0; j < image_len; j++) {
+      d->image_arr[i*image_len + j] = (data_t)fRand(low, high);
+    }
+  }
+
 }
