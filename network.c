@@ -8,8 +8,12 @@
 #define H1_SIZE 16
 #define L_SIZE 10
 
+#define INIT_LOW 0
+#define INIT_HIGH 10
+
 typedef struct {
   long int rowlen;
+  long int collen;
   data_t *data;
 } matrix_rec, *matrix_ptr;
 
@@ -71,7 +75,7 @@ int main() {
 // MATRIX STRUCT FUNCTIONS ----- BORROWED FROM PROF. HERBORDT
 
 
-matrix_ptr new_matrix(long int rowlen)
+matrix_ptr new_matrix(long int rowlen, long int collen)
 {
   long int i;
 
@@ -81,8 +85,8 @@ matrix_ptr new_matrix(long int rowlen)
   result->rowlen = rowlen;
 
   /* Allocate and declare array */
-  if (rowlen > 0) {
-    data_t *data = (data_t *) calloc(rowlen*rowlen, sizeof(data_t));
+  if (rowlen > 0 && collen > 0) {
+    data_t *data = (data_t *) calloc(rowlen*collen, sizeof(data_t));
     if (!data) {
       free((void *) result);
       printf("COULDN'T ALLOCATE %ld BYTES STORAGE \n",
@@ -96,27 +100,26 @@ matrix_ptr new_matrix(long int rowlen)
   return result;
 }
 
-/* Set row length of matrix */
-int set_matrix_rowlen(matrix_ptr m, long int index)
-{
-  m->rowlen = index;
-  return 1;
-}
-
 /* Return row length of matrix */
 long int get_matrix_rowlen(matrix_ptr m)
 {
   return m->rowlen;
 }
 
+/* Return row length of matrix */
+long int get_matrix_collen(matrix_ptr m)
+{
+  return m->collen;
+}
+
+
 /* initialize matrix */
-int init_matrix(matrix_ptr m, long int rowlen)
+int init_matrix(matrix_ptr m)
 {
   long int i;
 
-  if (rowlen > 0) {
-    m->rowlen = rowlen;
-    for (i = 0; i < rowlen*rowlen; i++) {
+  if (m->rowlen > 0 && m->collen > 0) {
+    for (i = 0; i < m->rowlen*m->collen; i++) {
       m->data[i] = (data_t)(i);
     }
     return 1;
@@ -131,13 +134,12 @@ double fRand(double fMin, double fMax)
 }
 
 /* initialize matrix to rand */
-int init_matrix_rand(matrix_ptr m, long int rowlen)
+int init_matrix_rand(matrix_ptr m)
 {
   long int i;
 
-  if (rowlen > 0) {
-    m->rowlen = rowlen;
-    for (i = 0; i < rowlen*rowlen; i++) {
+  if (m->rowlen > 0 && m->collen > 0) {
+    for (i = 0; i < m->rowlen*m->collen; i++) {
       m->data[i] = (data_t)(fRand(INIT_LOW, INIT_HIGH));
     }
     return 1;
@@ -145,29 +147,14 @@ int init_matrix_rand(matrix_ptr m, long int rowlen)
   else return 0;
 }
 
-int init_matrix_rand_ptr(matrix_ptr m, long int rowlen)
+int zero_matrix(matrix_ptr m)
 {
   long int i;
 
-  if (rowlen > 0) {
-    m->rowlen = rowlen;
-    for (i = 0; i < rowlen*rowlen; i++) {
-      m->data[i] = (data_t)(fRand(0, (double)(i)));
-    }
-    return 1;
-  }
-  else return 0;
-}
-
-/* initialize matrix */
-int zero_matrix(matrix_ptr m, long int rowlen)
-{
-  long int i,j;
-
-  if (rowlen > 0) {
-    m->rowlen = rowlen;
-    for (i = 0; i < rowlen*rowlen; i++)
+  if (m->rowlen > 0 && m->collen > 0) {
+    for (i = 0; i < m->rowlen*m->collen; i++) {
       m->data[i] = 0;
+    }
     return 1;
   }
   else return 0;
@@ -179,7 +166,7 @@ data_t *get_matrix_start(matrix_ptr m)
 }
 
 
-// ARRAY STRUCT FUNCTIONS
+// ARRAY STRUCT FUNCTIONS  ------ BORROWED FROM PROF. HERBORDT
 
 
 array_ptr new_array(long int len)
