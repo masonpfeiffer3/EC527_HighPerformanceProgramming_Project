@@ -226,7 +226,7 @@ void init_dataset_rand(dataset_ptr d, double low, double high) {
   long int image_len = d->image_len;
 
   for (i = 0; i < len; i++) {
-    d->nums[i] = (int)fRand(low, high);
+    d->nums[i] = (int)fRand(0, 10);
   }
 
   for (i = 0; i < len; i++) {

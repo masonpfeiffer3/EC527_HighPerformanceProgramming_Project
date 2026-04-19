@@ -11,8 +11,11 @@
 #define H1_SIZE 16
 #define L_SIZE 10
 
-#define TRAIN_SIZE 50000
+#define TRAIN_SIZE 50
+#define BATCH_SIZE 10
 #define TEST_SIZE 10000
+
+#define LEARN_RATE 1
 
 int main() {
 
@@ -30,7 +33,7 @@ int main() {
   init_matrix_rand(H0_W, 0, 1);
   init_array_rand(H0_B, 0, 1);
 
-  // H1 ARRAY
+  // H1 ARRAY, WEIGHTS, and BIASES
   array_ptr H1 = new_array(H1_SIZE);
   matrix_ptr H1_W = new_matrix(H1_SIZE, H0_SIZE);
   array_ptr H1_B = new_array(H1_SIZE);
@@ -39,7 +42,7 @@ int main() {
   init_matrix_rand(H1_W, 0, 1);
   init_array_rand(H1_B, 0, 1);
 
-  // OUTPUT ARRAY
+  // OUTPUT ARRAY, WEIGHTS, and BIASES
   array_ptr output = new_array(L_SIZE);
   matrix_ptr L_W = new_matrix(L_SIZE, H1_SIZE);
   array_ptr L_B = new_array(L_SIZE);
@@ -53,19 +56,26 @@ int main() {
   dataset_ptr train_data = new_dataset(TRAIN_SIZE, I_SIZE);
 
   // load data into data structure
-  init_dataset_rand(train_data, 0, 1);
+  init_dataset_rand(train_data, 0, 1);  // TO BE REPLACED
+
 
   // STAGE 2: TRAINING
 
+  for (int i = 0; i < TRAIN_SIZE; i++) {
+
+    // load input from dataset
+    copyImageToInput(train_data, input, i);
+
+    int num = train_data->nums[i];
 
 
-  // Load input image
-  init_array_rand(input, 0, 1); 
 
-  data_t* in = get_array_start(input);
 
-  for (int i = 0; i < I_SIZE; i++) {
-    printf("%.5f\n", in[i]);
+
+
+
+
+
   }
 
 
@@ -74,7 +84,13 @@ int main() {
 }
 
 
+float sigmoid(float z) {
+  return 1.0 / (1.0 + exp(-z));
+}
 
+float sigmoid_prime(float z) {
+  return sigmoid(z) * (1 - sigmoid(z));
+}
 
 
 

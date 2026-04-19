@@ -1,7 +1,7 @@
 #ifndef ARRAY_MATRIX_FUNCS_H
 #define ARRAY_MATRIX_FUNCS_H
 
-typedef double data_t;
+typedef float data_t;
 
 typedef struct {
     long int rowlen;
