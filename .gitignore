@@ -1,3 +1,10 @@
+# MNIST data
+mnist-c/data/*
+!mnist-c/data/.gitkeep
+
+# Compiled files
+mnist_c
+
 # Prerequisites
 *.d
 
