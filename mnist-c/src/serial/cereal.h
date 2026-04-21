@@ -14,6 +14,7 @@ int vector_copy(array_ptr source, array_ptr dest);
 data_t sigmoid(data_t z);
 void sigmoid_arr(array_ptr v);
 data_t sigmoid_prime(data_t z);
+void sigmoid_prime_arr(array_ptr v);
 
 int feedforward();
 array_ptr numToVec(int num);
