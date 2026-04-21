@@ -2,7 +2,6 @@
 #include <stdlib.h>
 #include <math.h>
 
-#include ".../params.h"
 #include "array_matrix_funcs.h"
 
 

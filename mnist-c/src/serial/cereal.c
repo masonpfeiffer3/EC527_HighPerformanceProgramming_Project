@@ -134,7 +134,17 @@ int serial_MNIST(dataset_ptr train_data, dataset_ptr test_data) {
 
       //printf("last layer second element (1): %f\n", output->data[1]);
 
+      if (!backprop(num)) printf("backprop failed!");  // BACKPROPAGATION
 
+      printf("2nd element of L_W_grad: %f\n", L_W_grad->data[1]);
+
+      matrix_matrix_add(H0_W_grad_sum, H0_W_grad, H0_W_grad_sum);
+      matrix_matrix_add(H1_W_grad_sum, H1_W_grad, H1_W_grad_sum);
+      matrix_matrix_add(L_W_grad_sum, L_W_grad, L_W_grad_sum);
+
+      vector_vector_add(H0_B_grad_sum, H0_B_grad, H0_B_grad_sum);
+      vector_vector_add(H1_B_grad_sum, H1_B_grad, H1_B_grad_sum);
+      vector_vector_add(H1_B_grad_sum, H1_B_grad, H1_B_grad_sum);
 
     }
 
@@ -151,25 +161,68 @@ int serial_MNIST(dataset_ptr train_data, dataset_ptr test_data) {
 int backprop(int num) {
 
   // OUTPUT LAYER
-
   // bias gradient
   array_ptr delCdelA = new_array(L_SIZE);
   array_ptr y = numToVec(num);
-  vector_vector_sub(OUT, y, delCdelA);  // set delCdelA
+  if (!vector_vector_sub(OUT, y, delCdelA)) return 0;  // set delCdelA
+  printf("L delCdelA 5: %f\n", delCdelA->data[4]);
+  printf("L delCdelA 4: %f\n", delCdelA->data[3]);
+  //printf("y 5: %f\n", y->data[5]);
   
   array_ptr delAdelZ = new_array(L_SIZE);
-  vector_copy(L_Z, delAdelZ);
+  if (!vector_copy(L_Z, delAdelZ)) return 0;
   sigmoid_prime_arr(delAdelZ);   // set delAdelZ
 
-  vector_vector_elementwise_mult(delAdelZ, delCdelA, L_B_grad);
+  if (!vector_vector_elementwise_mult(delAdelZ, delCdelA, L_B_grad)) return 0;
 
   // weight gradient
-  vector_vector_mult(L_B_grad, H1, L_W_grad);  // delZdelW are the activations of H1
+  if (!vector_vector_mult(L_B_grad, H1, L_W_grad)) return 0;  // delZdelW are the activations of H1
 
   // H1 layer activation gradient
-  matrix_ptr L_W_transpose = new_matrix(H1_SIZE, L_SIZE);
-  
+  matrix_ptr W_transpose = new_matrix(H1_SIZE, L_SIZE);
+  if (!matrix_transpose(L_W, W_transpose)) return 0;
+  if(!matrix_vector_mult(W_transpose, L_B_grad, H1_A_grad)) return 0;
 
+
+  // H1 LAYER
+  // bias gradient
+  delCdelA = new_array(H1_SIZE);
+  if (!vector_copy(H1_A_grad, delCdelA)) return 0;  // set delCdelA
+  printf("H1 delCdelA 5: %f\n", delCdelA->data[4]);
+  printf("H1 delCdelA 4: %f\n", delCdelA->data[3]);
+  
+  delAdelZ = new_array(H1_SIZE);
+  if (!vector_copy(H1_Z, delAdelZ)) return 0;
+  sigmoid_prime_arr(delAdelZ);   // set delAdelZ
+
+  if (!vector_vector_elementwise_mult(delAdelZ, delCdelA, H1_B_grad)) return 0;
+
+  // weight gradient
+  if (!vector_vector_mult(H1_B_grad, H0, H1_W_grad)) return 0;  // delZdelW are the activations of H0
+
+  // H1 layer activation gradient
+  W_transpose = new_matrix(H0_SIZE, H1_SIZE);
+  if (!matrix_transpose(H1_W, W_transpose)) return 0;
+  if (!matrix_vector_mult(W_transpose, H1_B_grad, H0_A_grad)) return 0;
+
+
+  // H0 LAYER
+  //bias gradient
+  delCdelA = new_array(H0_SIZE);
+  if (!vector_copy(H0_A_grad, delCdelA)) return 0;  // set delCdelA
+  printf("H0 delCdelA 5: %f\n", delCdelA->data[4]);
+  printf("H0 delCdelA 4: %f\n", delCdelA->data[3]);
+  
+  delAdelZ = new_array(H0_SIZE);
+  if (!vector_copy(H0_Z, delAdelZ)) return 0;
+  sigmoid_prime_arr(delAdelZ);   // set delAdelZ
+
+  if (!vector_vector_elementwise_mult(delAdelZ, delCdelA, H0_B_grad)) return 0;
+
+  // weight gradient
+  if (!vector_vector_mult(H0_B_grad, IN, H0_W_grad)) return 0;  // delZdelW are the activations of IN
+
+  return 1;
 
 }
 
@@ -234,7 +287,14 @@ data_t sigmoid_prime(data_t z) {
 
 
 
+array_ptr numToVec(int num) {
+  array_ptr result = new_array(L_SIZE);  // initializes all elements to 0 with calloc
 
+  result->data[num] = 1;
+
+  return result;
+  //vector_copy(result, y);
+}
 
 
 

@@ -3,7 +3,8 @@
 #include <math.h>
 
 #include "array_matrix_math.h"
-#include ".../params.h"
+#include "array_matrix_funcs.h"
+
 
 int matrix_transpose(matrix_ptr m, matrix_ptr m_out) {
 
@@ -187,10 +188,3 @@ int vector_copy(array_ptr source, array_ptr dest) {
   return 0;
 }
 
-array_ptr numToVec(int num) {
-  array_ptr result = new_array(L_SIZE);  // initializes all elements to 0 with calloc
-
-  result->data[num] = 1;
-
-  return result;
-}
