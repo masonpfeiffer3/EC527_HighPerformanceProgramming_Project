@@ -12,12 +12,12 @@ typedef struct {
     long int rows;
     long int cols;
     data_t *data;
-} matrix_rec, *matrix_ptr;
+} matrix_rec, *matrix_ptr; //flattened 2D
 
 typedef struct {
     long int len;
     data_t *data;
-} array_rec, *array_ptr;
+} array_rec, *array_ptr; //1D
 
 typedef struct {
     long int len;

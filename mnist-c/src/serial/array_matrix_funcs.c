@@ -1,8 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <time.h>
 #include <math.h>
 
+#include ".../params.h"
 #include "array_matrix_funcs.h"
 
 
