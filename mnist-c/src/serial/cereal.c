@@ -161,9 +161,15 @@ int backprop(int num) {
   vector_copy(L_Z, delAdelZ);
   sigmoid_prime_arr(delAdelZ);   // set delAdelZ
 
-  vector_vector_mult(delAdelZ, delCdelA, L_B_grad);
+  vector_vector_elementwise_mult(delAdelZ, delCdelA, L_B_grad);
 
   // weight gradient
+  vector_vector_mult(L_B_grad, H1, L_W_grad);  // delZdelW are the activations of H1
+
+  // H1 layer activation gradient
+  matrix_ptr L_W_transpose = new_matrix(H1_SIZE, L_SIZE);
+  
+
 
 }
 
