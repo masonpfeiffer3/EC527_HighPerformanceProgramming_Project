@@ -5,6 +5,29 @@
 #include "array_matrix_math.h"
 #include ".../params.h"
 
+int matrix_transpose(matrix_ptr m, matrix_ptr m_out) {
+
+  long int rows = get_matrix_rows(m);
+  long int cols = get_matrix_cols(m);
+  long int out_rows = get_matrix_rows(m_out);
+  long int out_cols = get_matrix_cols(m_out);
+
+  data_t* m_start = get_matrix_start(m);
+  data_t* m_out_start = get_matrix_start(m_out);
+
+  if (rows == out_cols && cols == out_rows) {
+    for (int i = 0; i < rows; i++) {
+      for (int j = 0; j < cols; j++) {
+        m_out_start[j*out_cols + i] = m_start[i*cols + j];
+      }
+    }
+    return 1;
+  }
+
+  return 0;
+
+}
+
 int matrix_vector_mult(matrix_ptr m, array_ptr v, array_ptr v_out) {
 
   long int rows = get_matrix_rows(m);
