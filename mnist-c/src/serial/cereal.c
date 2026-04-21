@@ -153,7 +153,17 @@ int backprop(int num) {
   // OUTPUT LAYER
 
   // bias gradient
+  array_ptr delCdelA = new_array(L_SIZE);
+  array_ptr y = numToVec(num);
+  vector_vector_sub(OUT, y, delCdelA);  // set delCdelA
   
+  array_ptr delAdelZ = new_array(L_SIZE);
+  vector_copy(L_Z, delAdelZ);
+  sigmoid_prime_arr(delAdelZ);   // set delAdelZ
+
+  vector_vector_mult(delAdelZ, delCdelA, L_B_grad);
+
+  // weight gradient
 
 }
 
