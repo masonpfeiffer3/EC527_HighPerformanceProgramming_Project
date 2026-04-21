@@ -62,6 +62,7 @@ int serial_MNIST(dataset_ptr train_data, dataset_ptr test_data) {
   H0_W = new_matrix(H0_SIZE, I_SIZE);
   H0_B = new_array(H0_SIZE);
   H0_Z = new_array(H0_SIZE);
+
   H0_W_grad = new_matrix(H0_SIZE, I_SIZE);
   H0_B_grad = new_array(H0_SIZE);
 
@@ -74,8 +75,10 @@ int serial_MNIST(dataset_ptr train_data, dataset_ptr test_data) {
   H1_W = new_matrix(H1_SIZE, H0_SIZE);
   H1_B = new_array(H1_SIZE);
   H1_Z = new_array(H1_SIZE);
+
   H1_W_grad = new_matrix(H1_SIZE, H0_SIZE);
   H1_B_grad = new_array(H1_SIZE);
+  H0_A_grad = new_array(H0_SIZE);
 
   init_array_rand(H1, 0, 1);
   init_matrix_rand(H1_W, -1, 1);
@@ -86,8 +89,10 @@ int serial_MNIST(dataset_ptr train_data, dataset_ptr test_data) {
   L_W = new_matrix(L_SIZE, H1_SIZE);
   L_B = new_array(L_SIZE);
   L_Z = new_array(L_SIZE);
+
   L_W_grad = new_matrix(L_SIZE, H1_SIZE);
   L_B_grad = new_array(L_SIZE);
+  H1_A_grad = new_array(H1_SIZE);
 
   init_array_rand(OUT, 0, 1);
   init_matrix_rand(L_W, -1, 1);
@@ -103,19 +108,13 @@ int serial_MNIST(dataset_ptr train_data, dataset_ptr test_data) {
 
   // STAGE 2: TRAINING
 
-  matrix_ptr H0_W_sum = new_matrix(H0_SIZE, I_SIZE);
-  matrix_ptr H0_W_temp = new_matrix(H0_SIZE, I_SIZE);
-  matrix_ptr H1_W_sum = new_matrix(H1_SIZE, H0_SIZE);
-  matrix_ptr H1_W_temp = new_matrix(H1_SIZE, H0_SIZE);
-  matrix_ptr L_W_sum = new_matrix(L_SIZE, H1_SIZE);
-  matrix_ptr L_W_temp = new_matrix(L_SIZE, H1_SIZE);
+  matrix_ptr H0_W_grad_sum = new_matrix(H0_SIZE, I_SIZE);
+  matrix_ptr H1_W_grad_sum = new_matrix(H1_SIZE, H0_SIZE);
+  matrix_ptr L_W_grad_sum = new_matrix(L_SIZE, H1_SIZE);
 
-  array_ptr H0_B_sum = new_array(H0_SIZE);
-  array_ptr H0_B_temp = new_array(H0_SIZE);
-  array_ptr H1_B_sum = new_array(H1_SIZE);
-  array_ptr H1_B_temp = new_array(H1_SIZE);
-  array_ptr L_B_sum = new_array(L_SIZE);
-  array_ptr L_B_temp = new_array(L_SIZE);
+  array_ptr H0_B_grad_sum = new_array(H0_SIZE);
+  array_ptr H1_B_grad_sum = new_array(H1_SIZE);
+  array_ptr L_B_grad_sum = new_array(L_SIZE);
 
   for (int i = 0; i < TRAIN_SIZE; i+=BATCH_SIZE) {
 
@@ -146,7 +145,12 @@ int serial_MNIST(dataset_ptr train_data, dataset_ptr test_data) {
 }
 
 
-int backprop() {
+int backprop(int num) {
+
+  // OUTPUT LAYER
+
+  // bias gradient
+  
 
 }
 
@@ -252,6 +256,48 @@ int vector_vector_add(array_ptr v1, array_ptr v2, array_ptr v_out) {
   if (v1len == v2len && v2len == voutlen) {
     for (int i = 0; i < v1len; i++) {
       vout_start[i] = v1_start[i] + v2_start[i];
+    }
+    return 1;
+  }
+
+  return 0;
+
+}
+
+int vector_vector_sub(array_ptr v1, array_ptr v2, array_ptr v_out) {
+
+  int v1len = get_array_length(v1);
+  int v2len = get_array_length(v2);
+  int voutlen = get_array_length(v_out);
+
+  data_t* v1_start = get_array_start(v1);
+  data_t* v2_start = get_array_start(v2);
+  data_t* vout_start = get_array_start(v_out);
+
+  if (v1len == v2len && v2len == voutlen) {
+    for (int i = 0; i < v1len; i++) {
+      vout_start[i] = v1_start[i] - v2_start[i];
+    }
+    return 1;
+  }
+
+  return 0;
+
+}
+
+int vector_vector_mult(array_ptr v1, array_ptr v2, array_ptr v_out) {
+
+  int v1len = get_array_length(v1);
+  int v2len = get_array_length(v2);
+  int voutlen = get_array_length(v_out);
+
+  data_t* v1_start = get_array_start(v1);
+  data_t* v2_start = get_array_start(v2);
+  data_t* vout_start = get_array_start(v_out);
+
+  if (v1len == v2len && v2len == voutlen) {
+    for (int i = 0; i < v1len; i++) {
+      vout_start[i] = v1_start[i] * v2_start[i];
     }
     return 1;
   }
