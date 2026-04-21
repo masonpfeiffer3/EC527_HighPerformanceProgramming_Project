@@ -144,7 +144,7 @@ int serial_MNIST(dataset_ptr train_data, dataset_ptr test_data) {
 
       vector_vector_add(H0_B_grad_sum, H0_B_grad, H0_B_grad_sum);
       vector_vector_add(H1_B_grad_sum, H1_B_grad, H1_B_grad_sum);
-      vector_vector_add(H1_B_grad_sum, H1_B_grad, H1_B_grad_sum);
+      vector_vector_add(L_B_grad_sum, L_B_grad, L_B_grad_sum);
 
     }
 
