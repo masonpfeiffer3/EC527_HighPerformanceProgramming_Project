@@ -224,3 +224,23 @@ int vector_copy(array_ptr source, array_ptr dest) {
   return 0;
 }
 
+output_max vector_max(array_ptr v){
+  int len = get_array_length(v);
+  data_t* v1_start = get_array_start(v);
+
+  data_t temp_max = -9; //set to less than the minimum
+  int index = 0; //set to the first value
+
+  for(int i = 0; i < len; i++){
+    if(v1_start[i] > temp_max){
+      temp_max = v1_start[i];
+      index = i;
+    }
+  }
+  output_max result;
+  result.value = temp_max;
+  result.index = index;
+  
+  return result;
+
+}
