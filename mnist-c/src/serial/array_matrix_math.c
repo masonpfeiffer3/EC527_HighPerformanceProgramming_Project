@@ -39,9 +39,10 @@ int matrix_scalar_mult(matrix_ptr m, data_t scalar, matrix_ptr m_out){
   data_t* m_out_start = get_matrix_start(m_out);
 
   if(rows == out_rows && cols == out_cols){
+    //printf("here! scalar = %f\n", scalar);
     for(int i = 0; i < rows; i++){
       for(int j = 0; j < cols; j++){
-        m_out_start[i*cols+j] = scalar * m_start[i*cols];
+        m_out_start[i*cols+j] = scalar * m_start[i*cols+j];
       }
     }
     return 1;

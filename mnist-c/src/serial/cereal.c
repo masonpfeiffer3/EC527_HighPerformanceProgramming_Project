@@ -70,7 +70,7 @@ int serial_MNIST(dataset_ptr train_data, dataset_ptr test_data) {
   H0_B_grad = new_array(H0_SIZE);
 
   init_array_rand(H0, 0, 1);
-  init_matrix_rand(H0_W, -1, 1);
+  init_matrix_rand(H0_W, -0.035, 0.035);
   init_array_rand(H0_B, -1, 1);
 
   // H1 ARRAY, WEIGHTS, and BIASES
@@ -117,16 +117,17 @@ int serial_MNIST(dataset_ptr train_data, dataset_ptr test_data) {
   array_ptr H1_B_grad_sum = new_array(H1_SIZE);
   array_ptr L_B_grad_sum = new_array(L_SIZE);
 
+  int temp = 0;
+
   for (int i = 0; i < TRAIN_SIZE; i+=BATCH_SIZE) {
 
     printf("BATCH #%d starting\n", i/BATCH_SIZE);
 
-    for (int j = i; j < i + BATCH_SIZE; j++) {
+    for (int j = i; j < i + BATCH_SIZE + temp; j++) {
 
       copyImageToInput(train_data, IN, j);   // load input from dataset
 
       int num = train_data->nums[j];   // load number
-
 
       printf("Num: %d\n", num);
 
@@ -140,7 +141,21 @@ int serial_MNIST(dataset_ptr train_data, dataset_ptr test_data) {
 
       if (!backprop(num)) printf("backprop failed!");  // BACKPROPAGATION
 
-      printf("2nd element of L_W_grad: %f\n", L_W_grad->data[1]);
+      // printf("last layer biases: ");
+      // for (int k = 0; k < L_B->len; k++) {
+      //   printf("%f, ", L_B->data[k]);
+      // }
+      // printf("\n");
+
+      // printf("last layer L_B_grad_sum: ");
+      // for (int k = 0; k < L_B_grad_sum->len; k++) {
+      //   printf("%f, ", L_B_grad_sum->data[k]);
+      // }
+      // printf("\n");
+      
+
+
+      //printf("2nd element of L_W_grad: %f\n", L_W_grad->data[1]);
 
       matrix_matrix_add(H0_W_grad_sum, H0_W_grad, H0_W_grad_sum);
       matrix_matrix_add(H1_W_grad_sum, H1_W_grad, H1_W_grad_sum);
@@ -149,6 +164,7 @@ int serial_MNIST(dataset_ptr train_data, dataset_ptr test_data) {
       vector_vector_add(H0_B_grad_sum, H0_B_grad, H0_B_grad_sum);
       vector_vector_add(H1_B_grad_sum, H1_B_grad, H1_B_grad_sum);
       vector_vector_add(L_B_grad_sum, L_B_grad, L_B_grad_sum);
+
 
     }
 
@@ -202,6 +218,9 @@ int serial_MNIST(dataset_ptr train_data, dataset_ptr test_data) {
   }
 
 
+  
+
+
 
   return 0;
 }
@@ -214,8 +233,8 @@ int backprop(int num) {
   array_ptr delCdelA = new_array(L_SIZE);
   array_ptr y = numToVec(num);
   if (!vector_vector_sub(OUT, y, delCdelA)) return 0;  // set delCdelA
-  printf("L delCdelA 5: %f\n", delCdelA->data[4]);
-  printf("L delCdelA 4: %f\n", delCdelA->data[3]);
+  //printf("L delCdelA 5: %f\n", delCdelA->data[4]);
+  //printf("L delCdelA 4: %f\n", delCdelA->data[3]);
   //printf("y 5: %f\n", y->data[5]);
   
   array_ptr delAdelZ = new_array(L_SIZE);
@@ -237,8 +256,8 @@ int backprop(int num) {
   // bias gradient
   delCdelA = new_array(H1_SIZE);
   if (!vector_copy(H1_A_grad, delCdelA)) return 0;  // set delCdelA
-  printf("H1 delCdelA 5: %f\n", delCdelA->data[4]);
-  printf("H1 delCdelA 4: %f\n", delCdelA->data[3]);
+  //printf("H1 delCdelA 5: %f\n", delCdelA->data[4]);
+  //printf("H1 delCdelA 4: %f\n", delCdelA->data[3]);
   
   delAdelZ = new_array(H1_SIZE);
   if (!vector_copy(H1_Z, delAdelZ)) return 0;
@@ -259,8 +278,8 @@ int backprop(int num) {
   //bias gradient
   delCdelA = new_array(H0_SIZE);
   if (!vector_copy(H0_A_grad, delCdelA)) return 0;  // set delCdelA
-  printf("H0 delCdelA 5: %f\n", delCdelA->data[4]);
-  printf("H0 delCdelA 4: %f\n", delCdelA->data[3]);
+  //printf("H0 delCdelA 5: %f\n", delCdelA->data[4]);
+  //printf("H0 delCdelA 4: %f\n", delCdelA->data[3]);
   
   delAdelZ = new_array(H0_SIZE);
   if (!vector_copy(H0_Z, delAdelZ)) return 0;
