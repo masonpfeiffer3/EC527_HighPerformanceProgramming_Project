@@ -232,7 +232,7 @@ output_max vector_max(array_ptr v){
   data_t temp_max = v1_start[0]; //set to less than the minimum
   int index = 0; //set to the first value
 
-  for(int i = 0; i < len; i++){
+  for(int i = 1; i < len; i++){
     if(v1_start[i] > temp_max){
       temp_max = v1_start[i];
       index = i;
