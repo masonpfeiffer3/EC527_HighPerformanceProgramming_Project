@@ -180,6 +180,19 @@ data_t *get_array_start(array_ptr v)
   return v->data;
 }
 
+int zero_array(array_ptr m)
+{
+  long int i;
+
+  if (m->len > 0) {
+    for (i = 0; i < m->len; i++) {
+      m->data[i] = 0;
+    }
+    return 1;
+  }
+  else return 0;
+}
+
 
 
 // DATASET FUNC DECLARATIONS

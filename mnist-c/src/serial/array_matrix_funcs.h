@@ -22,6 +22,7 @@ int get_array_element(array_ptr v, long int index, data_t *dest);
 long int get_array_length(array_ptr v);
 data_t *get_array_start(array_ptr v);
 int init_array(array_ptr v);
+int zero_array(array_ptr m);
 int init_array_rand(array_ptr v, double low, double high);
 
 
