@@ -41,7 +41,7 @@ int matrix_scalar_mult(matrix_ptr m, data_t scalar, matrix_ptr m_out){
   if(rows == out_rows && cols == out_cols){
     for(int i = 0; i < rows; i++){
       for(int j = 0; j < cols; j++){
-        m_out_start[i*cols+j] = scalar * m_start[i*cols];
+        m_out_start[i*cols+j] = scalar * m_start[i*cols+j];
       }
     }
     return 1;
@@ -228,7 +228,7 @@ output_max vector_max(array_ptr v){
   int len = get_array_length(v);
   data_t* v1_start = get_array_start(v);
 
-  data_t temp_max = -9; //set to less than the minimum
+  data_t temp_max = v1_start[0]; //set to less than the minimum
   int index = 0; //set to the first value
 
   for(int i = 0; i < len; i++){

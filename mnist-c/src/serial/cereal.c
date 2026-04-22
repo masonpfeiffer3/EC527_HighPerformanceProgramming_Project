@@ -70,7 +70,7 @@ int serial_MNIST(dataset_ptr train_data, dataset_ptr test_data) {
   H0_B_grad = new_array(H0_SIZE);
 
   init_array_rand(H0, 0, 1);
-  init_matrix_rand(H0_W, -1, 1);
+  init_matrix_rand(H0_W, -0.035, 0.035);
   init_array_rand(H0_B, -1, 1);
 
   // H1 ARRAY, WEIGHTS, and BIASES
