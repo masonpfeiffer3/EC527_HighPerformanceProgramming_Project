@@ -13,7 +13,7 @@
 #define H1_SIZE 16
 #define L_SIZE 10
 
-#define BATCH_SIZE 1
+#define BATCH_SIZE 10
 
 #define LEARN_RATE 1
 
@@ -102,11 +102,9 @@ int serial_MNIST(dataset_ptr train_data, dataset_ptr test_data) {
   init_array_rand(L_B, -1, 1);
 
 
-  // // TRAINING DATA
+  // DUMMY TRAINING DATA
   // dataset_ptr train_data = new_dataset(TRAIN_SIZE, I_SIZE);
-
-  // // load data into data structure
-  // init_dataset_rand(train_data, 0, 1);  // TO BE REPLACED
+  // init_dataset_rand(train_data, 0, 1);
 
 
   // STAGE 2: TRAINING
@@ -121,18 +119,24 @@ int serial_MNIST(dataset_ptr train_data, dataset_ptr test_data) {
 
   for (int i = 0; i < TRAIN_SIZE; i+=BATCH_SIZE) {
 
+    printf("BATCH #%d starting\n", i/BATCH_SIZE);
+
     for (int j = i; j < i + BATCH_SIZE; j++) {
 
-      copyImageToInput(train_data, IN, i);   // load input from dataset
+      copyImageToInput(train_data, IN, j);   // load input from dataset
 
-      int num = train_data->nums[i];   // load number
+      int num = train_data->nums[j];   // load number
 
 
       printf("Num: %d\n", num);
 
       feedforward();  // FEEDFORWARD
 
-      //printf("last layer second element (1): %f\n", output->data[1]);
+      printf("last layer activations: ");
+      for (int k = 0; k < OUT->len; k++) {
+        printf("%f, ", OUT->data[k]);
+      }
+      printf("\n");
 
       if (!backprop(num)) printf("backprop failed!");  // BACKPROPAGATION
 
@@ -148,6 +152,51 @@ int serial_MNIST(dataset_ptr train_data, dataset_ptr test_data) {
 
     }
 
+    data_t reciprocalBatchSize = (1.0/BATCH_SIZE);
+
+    // average weight gradients x learning rate x -1
+    matrix_scalar_mult(H0_W_grad_sum, reciprocalBatchSize, H0_W_grad_sum);  // average gradient over batch
+    matrix_scalar_mult(H0_W_grad_sum, (data_t)LEARN_RATE, H0_W_grad_sum);  // average gradient times learning rate eta
+    matrix_scalar_mult(H0_W_grad_sum, -1.0, H0_W_grad_sum);  // negate
+
+    matrix_scalar_mult(H1_W_grad_sum, reciprocalBatchSize, H1_W_grad_sum);  // average gradient over batch
+    matrix_scalar_mult(H1_W_grad_sum, (data_t)LEARN_RATE, H1_W_grad_sum);  // average gradient times learning rate eta
+    matrix_scalar_mult(H1_W_grad_sum, -1.0, H1_W_grad_sum);
+
+    matrix_scalar_mult(L_W_grad_sum, reciprocalBatchSize, L_W_grad_sum);  // average gradient over batch
+    matrix_scalar_mult(L_W_grad_sum, (data_t)LEARN_RATE, L_W_grad_sum);  // average gradient times learning rate eta
+    matrix_scalar_mult(L_W_grad_sum, -1.0, L_W_grad_sum);
+
+    // average bias gradients x learning rate x -1
+    vector_scalar_mult(H0_B_grad_sum, reciprocalBatchSize, H0_B_grad_sum);
+    vector_scalar_mult(H0_B_grad_sum, (data_t)LEARN_RATE, H0_B_grad_sum);
+    vector_scalar_mult(H0_B_grad_sum, -1.0, H0_B_grad_sum);
+
+    vector_scalar_mult(H1_B_grad_sum, reciprocalBatchSize, H1_B_grad_sum);
+    vector_scalar_mult(H1_B_grad_sum, (data_t)LEARN_RATE, H1_B_grad_sum);
+    vector_scalar_mult(H1_B_grad_sum, -1.0, H1_B_grad_sum);
+
+    vector_scalar_mult(L_B_grad_sum, reciprocalBatchSize, L_B_grad_sum);
+    vector_scalar_mult(L_B_grad_sum, (data_t)LEARN_RATE, L_B_grad_sum);
+    vector_scalar_mult(L_B_grad_sum, -1.0, L_B_grad_sum);
+
+    // WEIGHT AND BIAS ADJUSTMENT
+    matrix_matrix_add(H0_W_grad_sum, H0_W, H0_W);
+    matrix_matrix_add(H1_W_grad_sum, H1_W, H1_W);
+    matrix_matrix_add(L_W_grad_sum, L_W, L_W);
+
+    vector_vector_add(H0_B_grad_sum, H0_B, H0_B);
+    vector_vector_add(H1_B_grad_sum, H1_B, H1_B);
+    vector_vector_add(L_B_grad_sum, L_B, L_B);
+
+    // Zero grad matrices and arrays
+    zero_matrix(H0_W_grad_sum);
+    zero_matrix(H1_W_grad_sum);
+    zero_matrix(L_W_grad_sum);
+
+    zero_array(H0_B_grad_sum);
+    zero_array(H1_B_grad_sum);
+    zero_array(L_B_grad_sum);
 
 
   }

@@ -38,7 +38,7 @@ int matrix_scalar_mult(matrix_ptr m, data_t scalar, matrix_ptr m_out){
   data_t* m_start = get_matrix_start(m);
   data_t* m_out_start = get_matrix_start(m_out);
 
-  if(rows == out_rows && cols = out_cols){
+  if(rows == out_rows && cols == out_cols){
     for(int i = 0; i < rows; i++){
       for(int j = 0; j < cols; j++){
         m_out_start[i*cols+j] = scalar * m_start[i*cols];
@@ -193,18 +193,18 @@ int vector_vector_elementwise_mult(array_ptr v1, array_ptr v2, array_ptr v_out) 
 
 int vector_scalar_mult(array_ptr v1, data_t scalar, array_ptr v_out){
   int len = get_array_length(v1);
-  int out_len = get_array_length(v_out)
+  int out_len = get_array_length(v_out);
 
   data_t* v1_start = get_array_start(v1);
   data_t* v_out_start = get_array_start(v_out);
 
   if(len == out_len){
     for(int i = 0; i < len; i++){
-      for(int j = 0; j < out_len; j++){
-        v_out_start(i*cols+j) = scalar * v1_start(i*cols+j);
-      }
+      v_out_start[i] = scalar * v1_start[i];
     }
+    return 1;
   }
+  return 0;
 }
 
 int vector_copy(array_ptr source, array_ptr dest) {
