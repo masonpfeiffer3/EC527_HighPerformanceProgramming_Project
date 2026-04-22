@@ -29,6 +29,26 @@ int matrix_transpose(matrix_ptr m, matrix_ptr m_out) {
 
 }
 
+int matrix_scalar_mult(matrix_ptr m, data_t scalar, matrix_ptr m_out){
+  long int rows = get_matrix_rows(m);
+  long int cols = get_matrix_cols(m);
+  long int out_rows = get_matrix_rows(m_out);
+  long int out_cols = get_matrix_cols(m_out);
+
+  data_t* m_start = get_matrix_start(m);
+  data_t* m_out_start = get_matrix_start(m_out);
+
+  if(rows == out_rows && cols = out_cols){
+    for(int i = 0; i < rows; i++){
+      for(int j = 0; j < cols; j++){
+        m_out_start[i*cols+j] = scalar * m_start[i*cols];
+      }
+    }
+    return 1;
+  }
+  return 0;
+}
+
 int matrix_vector_mult(matrix_ptr m, array_ptr v, array_ptr v_out) {
 
   long int rows = get_matrix_rows(m);
@@ -169,6 +189,22 @@ int vector_vector_elementwise_mult(array_ptr v1, array_ptr v2, array_ptr v_out) 
 
   return 0;
 
+}
+
+int vector_scalar_mult(array_ptr v1, data_t scalar, array_ptr v_out){
+  int len = get_array_length(v1);
+  int out_len = get_array_length(v_out)
+
+  data_t* v1_start = get_array_start(v1);
+  data_t* v_out_start = get_array_start(v_out);
+
+  if(len == out_len){
+    for(int i = 0; i < len; i++){
+      for(int j = 0; j < out_len; j++){
+        v_out_start(i*cols+j) = scalar * v1_start(i*cols+j);
+      }
+    }
+  }
 }
 
 int vector_copy(array_ptr source, array_ptr dest) {
