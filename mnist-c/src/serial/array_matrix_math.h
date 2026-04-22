@@ -3,6 +3,11 @@
 
 #include "../params.h"
 
+typedef struct{
+    data_t value;
+    int index;
+} output_max;
+
 // Matrix-vector operations
 int matrix_vector_mult(matrix_ptr m, array_ptr v, array_ptr v_out);
 
@@ -20,5 +25,6 @@ int vector_scalar_mult(array_ptr v1, data_t scalar, array_ptr v_out);
 
 // Utility
 int vector_copy(array_ptr source, array_ptr dest);
+output_max vector_max(array_ptr v);
 
 #endif
