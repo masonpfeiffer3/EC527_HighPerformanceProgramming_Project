@@ -175,7 +175,7 @@ void train_MNIST(dataset_ptr train_data){
       }
 
       data_t reciprocalBatchSize = 1.0 / BATCH_SIZE;
-
+      // Average weight gradients, scale by learning rate, negate
       matrix_scalar_mult(H0_W_grad_sum, reciprocalBatchSize, H0_W_grad_sum);
       matrix_scalar_mult(H0_W_grad_sum, (data_t)LEARN_RATE,  H0_W_grad_sum);
       matrix_scalar_mult(H0_W_grad_sum, -1.0,                H0_W_grad_sum);
