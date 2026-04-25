@@ -28,4 +28,4 @@ if [ ! -f $DATA_DIR/t10k-labels-idx1-ubyte ]; then
     gunzip $DATA_DIR/t10k-labels-idx1-ubyte.gz
 fi
 
-echo "Done! Files are in $DATA_DIR"
+echo "Done Downloading! Files are in $DATA_DIR"
