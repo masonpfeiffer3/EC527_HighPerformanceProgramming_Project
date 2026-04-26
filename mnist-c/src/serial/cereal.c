@@ -19,7 +19,7 @@
 #define LEARN_RATE 3 //3- model standardization
 #define NUM_EPOCHS 10 //10- model standardization
 
-#define NUM_THREADS 8  // tune this; sweep 1, 2, 4, 8, 16
+#define MAX_THREADS 32  // upper bound for scratch allocation; actual count set by OMP_NUM_THREADS
 
 // =====================================================================
 // SHARED (read-only during parallel region): weights and biases
@@ -69,8 +69,8 @@ typedef struct {
   array_ptr  H0_B_grad_sum, H1_B_grad_sum, L_B_grad_sum;
 } ThreadGradSum;
 
-static SampleScratch  *scratch;       // size = NUM_THREADS
-static ThreadGradSum  *thread_sums;   // size = NUM_THREADS
+static SampleScratch  *scratch;       // size = MAX_THREADS
+static ThreadGradSum  *thread_sums;   // size = MAX_THREADS
 
 // Forward declarations -- updated signatures take a scratch pointer
 void feedforward(SampleScratch *s);
@@ -117,10 +117,9 @@ void init_MNIST(){
   init_matrix_rand(L_W, -rand_range, rand_range);
 
   // PER-THREAD scratch + grad sums (allocate once for whole training run)
-  omp_set_num_threads(NUM_THREADS);
-  scratch     = malloc(NUM_THREADS * sizeof(SampleScratch));
-  thread_sums = malloc(NUM_THREADS * sizeof(ThreadGradSum));
-  for (int t = 0; t < NUM_THREADS; t++) {
+  scratch     = malloc(MAX_THREADS * sizeof(SampleScratch));
+  thread_sums = malloc(MAX_THREADS * sizeof(ThreadGradSum));
+  for (int t = 0; t < MAX_THREADS; t++) {
     alloc_scratch(&scratch[t]);
     alloc_thread_sums(&thread_sums[t]);
   }
@@ -239,7 +238,8 @@ void train_MNIST(dataset_ptr train_data){
       // ===== END PARALLEL REGION (implicit barrier) =====
 
       // ===== SERIAL: combine thread-local sums into global sum =====
-      for (int t = 0; t < NUM_THREADS; t++) {
+      int nthreads = omp_get_max_threads();
+      for (int t = 0; t < nthreads; t++) {
         matrix_matrix_add(H0_W_grad_sum, thread_sums[t].H0_W_grad_sum, H0_W_grad_sum);
         matrix_matrix_add(H1_W_grad_sum, thread_sums[t].H1_W_grad_sum, H1_W_grad_sum);
         matrix_matrix_add(L_W_grad_sum,  thread_sums[t].L_W_grad_sum,  L_W_grad_sum);

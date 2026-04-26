@@ -15,7 +15,10 @@ data:
 	bash scripts/download_data.sh
 
 run: all data
-	./$(TARGET)
+	for t in 1 2 4 5 6 7 8 9 10 11 12 16 20 24 32; do \
+		echo "=== Threads: $$t ==="; \
+		OMP_NUM_THREADS=$$t ./$(TARGET); \
+	done
 
 clean:
 	rm -f $(TARGET)
