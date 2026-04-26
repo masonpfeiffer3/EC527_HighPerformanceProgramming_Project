@@ -11,15 +11,11 @@ int kernel_matrix_vector_mult(matrix_ptr m, array_ptr v, array_ptr v_out) {
   data_t* lastLayerActivations = get_array_start(v);
   data_t* v_out_loc = get_array_start(v_out);
 
-  data_t sum = 0;
-
   if (vlen == cols) {
     for (int i = 0; i < rows; i++) {
       for (int j = 0; j < cols; j++) {
-        sum += weights[i*cols + j] * lastLayerActivations[j];
+        v_out_loc[i] += weights[i*cols + j] * lastLayerActivations[j];
       }
-      v_out_loc[i] = sum;
-      sum = 0;
     }
     return 1;
   }
