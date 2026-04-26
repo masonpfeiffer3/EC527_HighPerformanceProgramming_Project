@@ -14,7 +14,7 @@ data_t sigmoid(data_t z);
 void sigmoid_arr(array_ptr v);
 data_t sigmoid_prime(data_t z);
 void sigmoid_prime_arr(array_ptr v);
-int feedforward();
+void feedforward();
 int backprop(int num);
 array_ptr numToVec(int num);
 #endif

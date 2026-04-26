@@ -2,8 +2,8 @@
 
 CC = gcc #compiler
 
-SRC = src/mnist_loader.c src/main.c src/serial/cereal.c src/serial/array_matrix_funcs.c src/serial/array_matrix_math.c #sources
-HDR = src/mnist_loader.h src/serial/cereal.h src/serial/array_matrix_funcs.h src/serial/array_matrix_math.h #headers
+SRC = src/mnist_loader.c src/main.c src/serial/cereal.c src/serial/array_matrix_funcs.c src/serial/array_matrix_math.c src/serial/kernels.c #sources
+HDR = src/mnist_loader.h src/serial/cereal.h src/serial/array_matrix_funcs.h src/serial/array_matrix_math.h src/serial/kernels.h #headers
 TARGET = mnist_c #executable name
 
 all: $(TARGET)
