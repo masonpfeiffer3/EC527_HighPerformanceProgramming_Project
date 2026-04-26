@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <time.h>
 #include "mnist_loader.h"
 #include "serial/cereal.h"
 #include "params.h"
@@ -9,8 +10,11 @@ int main() {
     load_mnist(train_data, "data/train-images-idx3-ubyte", "data/train-labels-idx1-ubyte");
     load_mnist(test_data, "data/t10k-images-idx3-ubyte", "data/t10k-labels-idx1-ubyte");
 
-
+    struct timespec prog_start, prog_end;
+    clock_gettime(CLOCK_MONOTONIC, &prog_start);
     serial_MNIST(train_data, test_data);
+    clock_gettime(CLOCK_MONOTONIC, &prog_end);
+    printf("Total: %.4f s\n", (prog_end.tv_sec - prog_start.tv_sec) + (prog_end.tv_nsec - prog_start.tv_nsec) / 1e9);
 
 
     // printf("Loaded %ld images\n", train.len);

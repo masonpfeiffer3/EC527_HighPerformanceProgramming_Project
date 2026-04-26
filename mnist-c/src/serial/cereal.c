@@ -59,10 +59,28 @@ array_ptr  BP_delCdelA_H1, BP_delAdelZ_H1;
 matrix_ptr BP_W_T_H1;
 array_ptr  BP_delCdelA_H0, BP_delAdelZ_H0;
 
+// Hotspot timing -- file-scope so feedforward() and backprop() can share accumulators with train_MNIST()
+static struct timespec _hs_t0, _hs_t1;
+static double _mvm_total, _vvm_total, _mma_total;
+static long   _mvm_count, _vvm_count, _mma_count;
+
 void serial_MNIST(dataset_ptr train_data, dataset_ptr test_data) {
+  struct timespec t0, t1;
+
+  clock_gettime(CLOCK_MONOTONIC, &t0);
   init_MNIST();
+  clock_gettime(CLOCK_MONOTONIC, &t1);
+  printf("init_MNIST:  %.4f s\n", (t1.tv_sec - t0.tv_sec) + (t1.tv_nsec - t0.tv_nsec) / 1e9);
+
+  clock_gettime(CLOCK_MONOTONIC, &t0);
   train_MNIST(train_data);
+  clock_gettime(CLOCK_MONOTONIC, &t1);
+  printf("train_MNIST: %.4f s\n", (t1.tv_sec - t0.tv_sec) + (t1.tv_nsec - t0.tv_nsec) / 1e9);
+
+  clock_gettime(CLOCK_MONOTONIC, &t0);
   test_MNIST(test_data);
+  clock_gettime(CLOCK_MONOTONIC, &t1);
+  printf("test_MNIST:  %.4f s\n", (t1.tv_sec - t0.tv_sec) + (t1.tv_nsec - t0.tv_nsec) / 1e9);
 }
 
 void init_MNIST(){
@@ -138,6 +156,9 @@ void train_MNIST(dataset_ptr train_data){
   array_ptr H1_B_grad_sum = new_array(H1_SIZE);
   array_ptr L_B_grad_sum  = new_array(L_SIZE);
 
+  _mvm_total = _vvm_total = _mma_total = 0.0;
+  _mvm_count = _vvm_count = _mma_count = 0;
+
   int *indices = malloc(TRAIN_SIZE * sizeof(int));
   for (int k = 0; k < TRAIN_SIZE; k++) indices[k] = k;
 
@@ -165,7 +186,11 @@ void train_MNIST(dataset_ptr train_data){
 
         // HOTSPOT: H0_W_grad_sum += H0_W_grad   [16x784] + [16x784] -> [16x784]
         // R: 25,088 (2 x 12,544)   W: 12,544   FLOPs: 12,544 (add)
+        clock_gettime(CLOCK_MONOTONIC, &_hs_t0);
         kernel_matrix_matrix_add(H0_W_grad_sum, H0_W_grad, H0_W_grad_sum);
+        clock_gettime(CLOCK_MONOTONIC, &_hs_t1);
+        _mma_total += (_hs_t1.tv_sec - _hs_t0.tv_sec) + (_hs_t1.tv_nsec - _hs_t0.tv_nsec) / 1e9;
+        _mma_count++;
         matrix_matrix_add(H1_W_grad_sum, H1_W_grad, H1_W_grad_sum);
         matrix_matrix_add(L_W_grad_sum,  L_W_grad,  L_W_grad_sum);
 
@@ -219,6 +244,13 @@ void train_MNIST(dataset_ptr train_data){
   }
 
   free(indices);
+
+  printf("  kernel_matrix_vector_mult: total=%.4f s  calls=%ld  avg=%.2f ns\n",
+         _mvm_total, _mvm_count, (_mvm_total / _mvm_count) * 1e9);
+  printf("  kernel_vector_vector_mult: total=%.4f s  calls=%ld  avg=%.2f ns\n",
+         _vvm_total, _vvm_count, (_vvm_total / _vvm_count) * 1e9);
+  printf("  kernel_matrix_matrix_add:  total=%.4f s  calls=%ld  avg=%.2f ns\n",
+         _mma_total, _mma_count, (_mma_total / _mma_count) * 1e9);
 }
 
 void test_MNIST(dataset_ptr test_data) {
@@ -282,7 +314,12 @@ int backprop(int num) {
   if (!vector_vector_elementwise_mult(BP_delAdelZ_H0, BP_delCdelA_H0, H0_B_grad)) return 0;
   // HOTSPOT: H0_W_grad = delta_0 (x) IN   [16] outer [784] -> [16x784]
   // R: 25,088 (delta_0: 12,544 re-read per col + IN: 12,544 re-read per row)   W: 12,544   FLOPs: 12,544 (mul)
-  if (!kernel_vector_vector_mult(H0_B_grad, IN, H0_W_grad)) return 0;
+  clock_gettime(CLOCK_MONOTONIC, &_hs_t0);
+  int _vvm_ok = kernel_vector_vector_mult(H0_B_grad, IN, H0_W_grad);
+  clock_gettime(CLOCK_MONOTONIC, &_hs_t1);
+  _vvm_total += (_hs_t1.tv_sec - _hs_t0.tv_sec) + (_hs_t1.tv_nsec - _hs_t0.tv_nsec) / 1e9;
+  _vvm_count++;
+  if (!_vvm_ok) return 0;
 
   return 1;
 }
@@ -294,7 +331,11 @@ void feedforward() {
   // IN -> H0
   // HOTSPOT: z_0 = H0_W * IN   [16x784] * [784] -> [16]
   // R: 25,088 (H0_W: 12,544 + IN: 12,544 re-read per row)   W: 16   FLOPs: 25,088 (12,544 mul + 12,544 add)
+  clock_gettime(CLOCK_MONOTONIC, &_hs_t0);
   kernel_matrix_vector_mult(H0_W, IN, H0_mvm_res);
+  clock_gettime(CLOCK_MONOTONIC, &_hs_t1);
+  _mvm_total += (_hs_t1.tv_sec - _hs_t0.tv_sec) + (_hs_t1.tv_nsec - _hs_t0.tv_nsec) / 1e9;
+  _mvm_count++;
   vector_vector_add(H0_B, H0_mvm_res, H0_z_temp);
   vector_copy(H0_z_temp, H0_Z);
   sigmoid_arr(H0_z_temp);
