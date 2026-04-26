@@ -34,7 +34,7 @@ matrix_ptr L_W;  array_ptr L_B;
 // forward+backward pass. One copy per thread (NOT per sample) -- a
 // thread reuses its scratch sequentially across the samples it owns.
 // =====================================================================
-typedef struct {
+struct SampleScratch {
   // Activations + Z buffers
   array_ptr IN;
   array_ptr H0, H0_Z;
@@ -57,7 +57,7 @@ typedef struct {
   array_ptr  BP_delCdelA_H1, BP_delAdelZ_H1;
   matrix_ptr BP_W_T_H1;
   array_ptr  BP_delCdelA_H0, BP_delAdelZ_H0;
-} SampleScratch;
+};
 
 // =====================================================================
 // PER-THREAD gradient sums: each thread accumulates into its own slot
