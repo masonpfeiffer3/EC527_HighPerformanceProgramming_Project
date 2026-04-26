@@ -4,7 +4,6 @@
 #define TRAIN_SIZE 60000
 #define TEST_SIZE 10000
 #define IMAGE_SIZE 784
-#define EULER_NUMBER_F 2.71828182846
 
 typedef float data_t;
 

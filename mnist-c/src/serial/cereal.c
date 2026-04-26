@@ -10,13 +10,13 @@
 #include "cereal.h"
 
 #define I_SIZE  IMAGE_SIZE
-#define H0_SIZE 16 //increase model size with this
-#define H1_SIZE 16 //increase model size with this
-#define L_SIZE  10 //outputs
+#define H0_SIZE 100 //100- model standardization
+#define H1_SIZE 16 //16- model standardization
+#define L_SIZE  10 //10- model standardization
 
-#define BATCH_SIZE 10 //experiment with this
-#define LEARN_RATE 1 //expeirment with this
-#define NUM_EPOCHS 2 //experiment with this
+#define BATCH_SIZE 100 //100- model standardization
+#define LEARN_RATE 3 //3- model standardization
+#define NUM_EPOCHS 10 //10- model standardization
 
 // Input layer
 array_ptr IN;
@@ -328,7 +328,7 @@ void sigmoid_prime_arr(array_ptr v) {
 }
 
 data_t sigmoid(data_t z) {
-  return 1 / (1 + pow(EULER_NUMBER_F, -z));
+  return 1 / (1 + expf(-z));
 }
 
 data_t sigmoid_prime(data_t z) {
