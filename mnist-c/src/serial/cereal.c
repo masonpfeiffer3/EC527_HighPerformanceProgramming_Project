@@ -187,7 +187,7 @@ void train_MNIST(dataset_ptr train_data){
       matrix_scalar_mult(L_W_grad_sum, reciprocalBatchSize, L_W_grad_sum);
       matrix_scalar_mult(L_W_grad_sum, (data_t)LEARN_RATE,  L_W_grad_sum);
       matrix_scalar_mult(L_W_grad_sum, -1.0,                L_W_grad_sum);
-
+      // Average bias gradients, scale by learning rate, negate
       vector_scalar_mult(H0_B_grad_sum, reciprocalBatchSize, H0_B_grad_sum);
       vector_scalar_mult(H0_B_grad_sum, (data_t)LEARN_RATE,  H0_B_grad_sum);
       vector_scalar_mult(H0_B_grad_sum, -1.0,                H0_B_grad_sum);
@@ -199,7 +199,7 @@ void train_MNIST(dataset_ptr train_data){
       vector_scalar_mult(L_B_grad_sum, reciprocalBatchSize, L_B_grad_sum);
       vector_scalar_mult(L_B_grad_sum, (data_t)LEARN_RATE,  L_B_grad_sum);
       vector_scalar_mult(L_B_grad_sum, -1.0,                L_B_grad_sum);
-
+      // Apply updates to weights and biases
       matrix_matrix_add(H0_W_grad_sum, H0_W, H0_W);
       matrix_matrix_add(H1_W_grad_sum, H1_W, H1_W);
       matrix_matrix_add(L_W_grad_sum,  L_W,  L_W);
@@ -207,7 +207,7 @@ void train_MNIST(dataset_ptr train_data){
       vector_vector_add(H0_B_grad_sum, H0_B, H0_B);
       vector_vector_add(H1_B_grad_sum, H1_B, H1_B);
       vector_vector_add(L_B_grad_sum,  L_B,  L_B);
-
+      // Zero out accumulators for the next batch
       zero_matrix(H0_W_grad_sum);
       zero_matrix(H1_W_grad_sum);
       zero_matrix(L_W_grad_sum);
