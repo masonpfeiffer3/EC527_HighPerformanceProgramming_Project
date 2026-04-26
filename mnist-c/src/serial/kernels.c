@@ -13,6 +13,7 @@ int kernel_matrix_vector_mult(matrix_ptr m, array_ptr v, array_ptr v_out) {
 
   if (vlen == cols) {
     for (int i = 0; i < rows; i++) {
+      v_out_loc[i] = 0;
       for (int j = 0; j < cols; j++) {
         v_out_loc[i] += weights[i*cols + j] * lastLayerActivations[j];
       }
