@@ -7,9 +7,9 @@ int kernel_matrix_vector_mult(matrix_ptr m, array_ptr v, array_ptr v_out) {
   long int cols = get_matrix_cols(m);
   long int vlen = get_array_length(v);
 
-  data_t* weights = get_matrix_start(m);
-  data_t* lastLayerActivations = get_array_start(v);
-  data_t* v_out_loc = get_array_start(v_out);
+  data_t* restrict weights = get_matrix_start(m);
+  data_t* restrict lastLayerActivations = get_array_start(v);
+  data_t* restrict v_out_loc = get_array_start(v_out);
 
   data_t sum0 = 0;
   data_t sum1 = 0;
@@ -61,9 +61,9 @@ int kernel_vector_vector_mult(array_ptr v1, array_ptr v2, matrix_ptr v_out) {
   int voutrow = get_matrix_rows(v_out);
   int voutcol = get_matrix_cols(v_out);
 
-  data_t* v1_start = get_array_start(v1);
-  data_t* v2_start = get_array_start(v2);
-  data_t* vout_start = get_matrix_start(v_out);
+  data_t* restrict v1_start = get_array_start(v1);
+  data_t* restrict v2_start = get_array_start(v2);
+  data_t* restrict vout_start = get_matrix_start(v_out);
 
   data_t v1_val;
 
@@ -107,9 +107,9 @@ int kernel_matrix_matrix_add(matrix_ptr m1, matrix_ptr m2, matrix_ptr m_out) {
   long int rows_out = get_matrix_rows(m_out);
   long int cols_out = get_matrix_cols(m_out);
 
-  data_t* m1_start = get_matrix_start(m1);
-  data_t* m2_start = get_matrix_start(m2);
-  data_t* m_out_start = get_matrix_start(m_out);
+  data_t* restrict m1_start = get_matrix_start(m1);
+  data_t* restrict m2_start = get_matrix_start(m2);
+  data_t* restrict m_out_start = get_matrix_start(m_out);
 
   int i, j, row_offset, offset;
 
