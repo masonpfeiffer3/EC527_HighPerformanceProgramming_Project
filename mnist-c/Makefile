@@ -9,7 +9,7 @@ TARGET = mnist_c #executable name
 all: $(TARGET)
 #currently avoiding any optimizations by the compiler
 $(TARGET): $(SRC) $(HDR)
-	$(CC) -O0 -o $(TARGET) $(SRC) -lm
+	$(CC) -O3 -o $(TARGET) $(SRC) -lm
 
 data:
 	bash scripts/download_data.sh
