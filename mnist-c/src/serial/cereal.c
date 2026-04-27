@@ -318,8 +318,8 @@ void test_MNIST(dataset_ptr test_data) {
 int backprop(SampleScratch *s, int num) {
   // OUTPUT LAYER
   zero_array(s->BP_y);
-  s->BP_y->data[num] = 1;
-  if (!vector_vector_sub(s->OUT, s->BP_y, s->BP_delCdelA_L)) return 0;
+  s->BP_y->data[num] = -1.0;
+  if (!vector_vector_add(s->OUT, s->BP_y, s->BP_delCdelA_L)) return 0;
 
   if (!vector_copy(s->L_Z, s->BP_delAdelZ_L)) return 0;
   sigmoid_prime_arr(s->BP_delAdelZ_L);

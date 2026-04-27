@@ -123,27 +123,6 @@ int vector_vector_add(array_ptr v1, array_ptr v2, array_ptr v_out) {
 
 }
 
-//vector vector sub
-int vector_vector_sub(array_ptr v1, array_ptr v2, array_ptr v_out) {
-
-  int v1len = get_array_length(v1);
-  int v2len = get_array_length(v2);
-  int voutlen = get_array_length(v_out);
-
-  data_t* v1_start = get_array_start(v1);
-  data_t* v2_start = get_array_start(v2);
-  data_t* vout_start = get_array_start(v_out);
-
-  if (v1len == v2len && v2len == voutlen) {
-    for (int i = 0; i < v1len; i++) {
-      vout_start[i] = v1_start[i] - v2_start[i];
-    }
-    return 1;
-  }
-
-  return 0;
-
-}
 //standard vector multiply
 int vector_vector_mult(array_ptr v1, array_ptr v2, matrix_ptr v_out) {
 

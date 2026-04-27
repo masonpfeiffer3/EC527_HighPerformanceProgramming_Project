@@ -18,7 +18,6 @@ int matrix_scalar_mult(matrix_ptr m, data_t scalar, matrix_ptr m_out);
 
 // Vector-vector operations
 int vector_vector_add(array_ptr v1, array_ptr v2, array_ptr v_out);
-int vector_vector_sub(array_ptr v1, array_ptr v2, array_ptr v_out);
 int vector_vector_mult(array_ptr v1, array_ptr v2, matrix_ptr v_out);
 int vector_vector_elementwise_mult(array_ptr v1, array_ptr v2, array_ptr v_out);
 int vector_scalar_mult(array_ptr v1, data_t scalar, array_ptr v_out);
