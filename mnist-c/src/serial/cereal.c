@@ -12,14 +12,14 @@
 
 #define I_SIZE  IMAGE_SIZE
 #define H0_SIZE 100 //100- model standardization
-#define H1_SIZE 16 //16- model standardization
-#define L_SIZE  10 //10- model standardization
+#define H1_SIZE 16  //16- model standardization
+#define L_SIZE  10  //10- model standardization
 
 #define BATCH_SIZE 100 //100- model standardization
-#define LEARN_RATE 3 //3- model standardization
-#define NUM_EPOCHS 10 //10- model standardization
+#define LEARN_RATE 3   //3- model standardization
+#define NUM_EPOCHS 10  //10- model standardization
 
-#define MAX_THREADS 32  // upper bound for scratch allocation; actual count set by OMP_NUM_THREADS
+#define NUM_THREADS 8  // explicit thread count for OpenMP parallel regions
 
 // =====================================================================
 // SHARED (read-only during parallel region): weights and biases
@@ -69,8 +69,8 @@ typedef struct {
   array_ptr  H0_B_grad_sum, H1_B_grad_sum, L_B_grad_sum;
 } ThreadGradSum;
 
-static SampleScratch  *scratch;       // size = MAX_THREADS
-static ThreadGradSum  *thread_sums;   // size = MAX_THREADS
+static SampleScratch  *scratch;       // size = NUM_THREADS
+static ThreadGradSum  *thread_sums;   // size = NUM_THREADS
 
 // Forward declarations -- updated signatures take a scratch pointer
 void feedforward(SampleScratch *s);
@@ -100,7 +100,9 @@ void serial_MNIST(dataset_ptr train_data, dataset_ptr test_data) {
   printf("test_MNIST:  %.4f s\n", (t1.tv_sec - t0.tv_sec) + (t1.tv_nsec - t0.tv_nsec) / 1e9);
 }
 
-void init_MNIST(){
+void init_MNIST() {
+  omp_set_num_threads(NUM_THREADS);
+
   // SHARED weights and biases (read-only during parallel region)
   H0_W = new_matrix(H0_SIZE, I_SIZE);
   H0_B = new_array(H0_SIZE);
@@ -117,22 +119,22 @@ void init_MNIST(){
   init_matrix_rand(L_W, -rand_range, rand_range);
 
   // PER-THREAD scratch + grad sums (allocate once for whole training run)
-  scratch     = malloc(MAX_THREADS * sizeof(SampleScratch));
-  thread_sums = malloc(MAX_THREADS * sizeof(ThreadGradSum));
-  for (int t = 0; t < MAX_THREADS; t++) {
+  scratch     = malloc(NUM_THREADS * sizeof(SampleScratch));
+  thread_sums = malloc(NUM_THREADS * sizeof(ThreadGradSum));
+  for (int t = 0; t < NUM_THREADS; t++) {
     alloc_scratch(&scratch[t]);
     alloc_thread_sums(&thread_sums[t]);
   }
 }
 
 static void alloc_scratch(SampleScratch *s) {
-  s->IN  = new_array(I_SIZE);
-  s->H0  = new_array(H0_SIZE);
+  s->IN   = new_array(I_SIZE);
+  s->H0   = new_array(H0_SIZE);
   s->H0_Z = new_array(H0_SIZE);
-  s->H1  = new_array(H1_SIZE);
+  s->H1   = new_array(H1_SIZE);
   s->H1_Z = new_array(H1_SIZE);
-  s->OUT = new_array(L_SIZE);
-  s->L_Z = new_array(L_SIZE);
+  s->OUT  = new_array(L_SIZE);
+  s->L_Z  = new_array(L_SIZE);
 
   s->H0_W_grad = new_matrix(H0_SIZE, I_SIZE);
   s->H1_W_grad = new_matrix(H1_SIZE, H0_SIZE);
@@ -182,7 +184,7 @@ static void zero_thread_sums(ThreadGradSum *t) {
 
 // =====================================================================
 
-void train_MNIST(dataset_ptr train_data){
+void train_MNIST(dataset_ptr train_data) {
 
   // Global (final) gradient sum -- the destination after combining threads
   matrix_ptr H0_W_grad_sum = new_matrix(H0_SIZE, I_SIZE);
@@ -214,17 +216,14 @@ void train_MNIST(dataset_ptr train_data){
       #pragma omp parallel for schedule(static)
       for (int j = i; j < i + BATCH_SIZE; j++) {
         int tid = omp_get_thread_num();
-        SampleScratch *s = &scratch[tid];
+        SampleScratch *s  = &scratch[tid];
         ThreadGradSum *ts = &thread_sums[tid];
 
         copyImageToInput(train_data, s->IN, indices[j]);
         int num = train_data->nums[indices[j]];
 
         feedforward(s);
-        if (!backprop(s, num)) {
-          // can't printf safely from inside parallel region without a critical;
-          // skipping the message keeps the parallel section clean
-        }
+        backprop(s, num);
 
         // Accumulate this sample's gradients into THIS THREAD's sum.
         // Safe: no other thread touches ts.
@@ -238,8 +237,7 @@ void train_MNIST(dataset_ptr train_data){
       // ===== END PARALLEL REGION (implicit barrier) =====
 
       // ===== SERIAL: combine thread-local sums into global sum =====
-      int nthreads = omp_get_max_threads();
-      for (int t = 0; t < nthreads; t++) {
+      for (int t = 0; t < NUM_THREADS; t++) {
         matrix_matrix_add(H0_W_grad_sum, thread_sums[t].H0_W_grad_sum, H0_W_grad_sum);
         matrix_matrix_add(H1_W_grad_sum, thread_sums[t].H1_W_grad_sum, H1_W_grad_sum);
         matrix_matrix_add(L_W_grad_sum,  thread_sums[t].L_W_grad_sum,  L_W_grad_sum);
