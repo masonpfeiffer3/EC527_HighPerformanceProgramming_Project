@@ -446,3 +446,64 @@ int kernel_matrix_scalar_mult(matrix_ptr m, data_t scalar, matrix_ptr m_out) {
     }
     return 0;   
 }
+
+int kernel_vector_scalar_mult(array_ptr v1, data_t scalar, array_ptr v_out) {
+    int len = get_array_length(v1);
+    int out_len = get_array_length(v_out);
+
+    data_t* v1_start = get_array_start(v1);
+    data_t* v_out_start = get_array_start(v_out);
+
+    __m256 scalar_vec = _mm256_set1_ps(scalar);
+
+    int j;
+
+    if(len == out_len){
+        for (j = 0; j < len - (AVX_STRIDE - 1); j += AVX_STRIDE) {
+            __m256 in = _mm256_loadu_ps(&v1_start[j]);
+
+            __m256 out = _mm256_mul_ps(scalar_vec, in);
+
+            _mm256_storeu_ps(&v_out_start[j], out);
+        }
+
+        for (; j < len; j++) {
+            v_out_start[j] = scalar * v1_start[j];
+        }
+
+        return 1;
+    }
+    return 0;
+}
+
+void kernel_sigmoid_arr(array_ptr v) {
+    int len = get_array_length(v);
+    data_t* v_start = get_array_start(v);
+
+    __m256 pointfive = _mm256_set1_ps(0.5f);
+    __m256 one = _mm256_set1_ps(1.0f);
+    __m256 sign_mask = _mm256_set1_ps(-0.0f);
+
+    int i;
+
+    for (i = 0; i < len - (AVX_STRIDE - 1); i += AVX_STRIDE) { // approx for sigmoid
+        __m256 in = _mm256_loadu_ps(&v_start[i]); // load input
+        __m256 intermed = _mm256_andnot_ps(sign_mask, in);  // take abs value
+
+        intermed = _mm256_add_ps(one, intermed);  // add one to abs value
+
+        intermed = _mm256_div_ps(in, intermed); // divide in by 1 + abs(in)
+
+        intermed = _mm256_mul_ps(pointfive, intermed);  // multiply by 0.5
+
+        intermed = _mm256_add_ps(pointfive, intermed);  // add 0.5
+
+        _mm256_storeu_ps(&v_start[i], intermed);  // store
+    }
+
+    for (; i < len; i++) { // clean up
+        float x = v_start[i];
+        v_start[i] = 0.5 * (x / (1 + abs(x))) + 0.5;
+    }
+
+}

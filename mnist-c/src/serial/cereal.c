@@ -262,17 +262,17 @@ void train_MNIST(dataset_ptr train_data) {
       kernel_matrix_scalar_mult(L_W_grad_sum, (data_t)LEARN_RATE,  L_W_grad_sum);
       kernel_matrix_scalar_mult(L_W_grad_sum, -1.0,                L_W_grad_sum);
 
-      vector_scalar_mult(H0_B_grad_sum, reciprocalBatchSize, H0_B_grad_sum);
-      vector_scalar_mult(H0_B_grad_sum, (data_t)LEARN_RATE,  H0_B_grad_sum);
-      vector_scalar_mult(H0_B_grad_sum, -1.0,                H0_B_grad_sum);
+      kernel_vector_scalar_mult(H0_B_grad_sum, reciprocalBatchSize, H0_B_grad_sum);
+      kernel_vector_scalar_mult(H0_B_grad_sum, (data_t)LEARN_RATE,  H0_B_grad_sum);
+      kernel_vector_scalar_mult(H0_B_grad_sum, -1.0,                H0_B_grad_sum);
 
-      vector_scalar_mult(H1_B_grad_sum, reciprocalBatchSize, H1_B_grad_sum);
-      vector_scalar_mult(H1_B_grad_sum, (data_t)LEARN_RATE,  H1_B_grad_sum);
-      vector_scalar_mult(H1_B_grad_sum, -1.0,                H1_B_grad_sum);
+      kernel_vector_scalar_mult(H1_B_grad_sum, reciprocalBatchSize, H1_B_grad_sum);
+      kernel_vector_scalar_mult(H1_B_grad_sum, (data_t)LEARN_RATE,  H1_B_grad_sum);
+      kernel_vector_scalar_mult(H1_B_grad_sum, -1.0,                H1_B_grad_sum);
 
-      vector_scalar_mult(L_B_grad_sum, reciprocalBatchSize, L_B_grad_sum);
-      vector_scalar_mult(L_B_grad_sum, (data_t)LEARN_RATE,  L_B_grad_sum);
-      vector_scalar_mult(L_B_grad_sum, -1.0,                L_B_grad_sum);
+      kernel_vector_scalar_mult(L_B_grad_sum, reciprocalBatchSize, L_B_grad_sum);
+      kernel_vector_scalar_mult(L_B_grad_sum, (data_t)LEARN_RATE,  L_B_grad_sum);
+      kernel_vector_scalar_mult(L_B_grad_sum, -1.0,                L_B_grad_sum);
 
       kernel_matrix_matrix_add(H0_W_grad_sum, H0_W, H0_W);
       kernel_matrix_matrix_add(H1_W_grad_sum, H1_W, H1_W);
@@ -357,21 +357,21 @@ void feedforward(SampleScratch *s) {
   kernel_matrix_vector_mult(H0_W, s->IN, s->H0_mvm_res);
   kernel_vector_vector_add(H0_B, s->H0_mvm_res, s->H0_z_temp);
   vector_copy(s->H0_z_temp, s->H0_Z);
-  sigmoid_arr(s->H0_z_temp);
+  kernel_sigmoid_arr(s->H0_z_temp);
   vector_copy(s->H0_z_temp, s->H0);
 
   // H0 -> H1
   kernel_matrix_vector_mult(H1_W, s->H0, s->H1_mvm_res);
   kernel_vector_vector_add(H1_B, s->H1_mvm_res, s->H1_z_temp);
   vector_copy(s->H1_z_temp, s->H1_Z);
-  sigmoid_arr(s->H1_z_temp);
+  kernel_sigmoid_arr(s->H1_z_temp);
   vector_copy(s->H1_z_temp, s->H1);
 
   // H1 -> OUT
   kernel_matrix_vector_mult(L_W, s->H1, s->L_mvm_res);
   kernel_vector_vector_add(L_B, s->L_mvm_res, s->L_z_temp);
   vector_copy(s->L_z_temp, s->L_Z);
-  sigmoid_arr(s->L_z_temp);
+  kernel_sigmoid_arr(s->L_z_temp);
   vector_copy(s->L_z_temp, s->OUT);
 }
 
