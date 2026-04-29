@@ -354,7 +354,8 @@ static void train_parallel_MNIST(dataset_ptr train_data, int num_threads) {
 // Uses the trained shared weights.  Single-sample feedforward via matrix-vector
 // multiply -- no need to batch inference.
 
-static data_t sig_infer(data_t z) { return 1.0f / (1.0f + expf(-z)); }
+/* Use the same fast sigmoid as training: sigma(x) = 0.5 + 0.5*x/(1+|x|) */
+static data_t sig_infer(data_t z) { return 0.5f + 0.5f * z / (1.0f + fabsf(z)); }
 
 static void test_parallel_MNIST(dataset_ptr test_data) {
     // Allocate small working buffers for single-sample inference

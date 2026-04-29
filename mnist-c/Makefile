@@ -1,7 +1,7 @@
 .PHONY: data run clean
 
 CC     = gcc
-CFLAGS = -O0 -fopenmp
+CFLAGS = -O3 -fopenmp -mavx2 -mfma
 
 SRC = src/mnist_loader.c src/main.c \
       src/serial/array_matrix_funcs.c src/serial/array_matrix_math.c \
@@ -15,7 +15,7 @@ TARGET = mnist_c
 
 all: $(TARGET)
 
-# No compiler optimizations -- baseline for measuring algorithmic restructuring only
+# -O3 + AVX2 + FMA, hand-vectorized intrinsics throughout
 $(TARGET): $(SRC) $(HDR)
 	$(CC) $(CFLAGS) -o $(TARGET) $(SRC) -lm
 
