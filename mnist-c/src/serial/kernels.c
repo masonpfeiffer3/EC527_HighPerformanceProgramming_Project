@@ -272,3 +272,177 @@ int kernel_matrix_matrix_add(matrix_ptr m1, matrix_ptr m2, matrix_ptr m_out) {
 
     return 0;
 }
+
+
+int kernel_vector_vector_add(array_ptr v1, array_ptr v2, array_ptr v_out) {
+
+    int v1len   = get_array_length(v1);
+    int v2len   = get_array_length(v2);
+    int voutlen = get_array_length(v_out);
+
+    /* restrict eliminates aliasing between all three pointers            */
+    data_t* restrict v1_start   = get_array_start(v1);
+    data_t* restrict v2_start   = get_array_start(v2);
+    data_t* restrict vout_start = get_array_start(v_out);
+
+    if (v1len == v2len && v2len == voutlen) {
+
+        /* Single length variable — unambiguous loop bound after
+         * the equality check confirms all three lengths are equal        */
+        int len = v1len;
+
+        int i;
+
+        /* --- AVX loop: process 8 elements per iteration ---
+         * This is the simplest AVX pattern possible:
+         *   - No reduction:  results written directly to vout (unlike
+         *                    matrix_vector_mult which collapses to scalar)
+         *   - No broadcast:  all three arrays vary each iteration (unlike
+         *                    vector_vector_mult which broadcasts v1[i])
+         *   - Flat 1D:       no row_offset calculation needed (unlike
+         *                    matrix_matrix_add which has 2D indexing)
+         * Bound (len - 7) ensures indices i through i+7 are always valid.
+         * For len=784: covers all 784 elements, cleanup never fires.
+         * For len=16:  covers all 16 elements,  cleanup never fires.     */
+        for (i = 0; i < len - (AVX_STRIDE - 1); i += AVX_STRIDE) {
+
+            /* Load 8 elements from v1: v1[i] .. v1[i+7]                 */
+            __m256 a = _mm256_loadu_ps(&v1_start[i]);
+
+            /* Load 8 elements from v2: v2[i] .. v2[i+7]                 */
+            __m256 b = _mm256_loadu_ps(&v2_start[i]);
+
+            /* Element-wise add: lane k = v1[i+k] + v2[i+k]              */
+            __m256 c = _mm256_add_ps(a, b);
+
+            /* Store 8 results directly to vout: no reduction needed      */
+            _mm256_storeu_ps(&vout_start[i], c);
+        }
+
+        /* --- Scalar cleanup: handles remaining 0-7 elements ---
+         * For len=784: i=784, never fires.
+         * For len=100: i=96,  fires 4 times (i=96,97,98,99).
+         * For len=16:  i=16,  never fires.
+         * For len=10:  i=8,   fires 2 times (i=8,9).                    */
+        for (; i < len; i++) {
+            vout_start[i] = v1_start[i] + v2_start[i];
+        }
+
+        return 1;
+    }
+
+    return 0;
+}
+
+
+int kernel_matrix_transpose(matrix_ptr m, matrix_ptr m_out) {
+
+    long int rows     = get_matrix_rows(m);
+    long int cols     = get_matrix_cols(m);
+    long int out_rows = get_matrix_rows(m_out);
+    long int out_cols = get_matrix_cols(m_out);
+
+    /* CHANGE 1: restrict on both pointers — removes aliasing between
+     * input and output, allowing the compiler to keep loaded values
+     * in registers rather than reloading from memory each iteration.   */
+    data_t* restrict m_start     = get_matrix_start(m);
+    data_t* restrict m_out_start = get_matrix_start(m_out);
+
+    if (rows == out_cols && cols == out_rows) {
+
+        /* CHANGE 2: precompute stride multiples once outside both loops.
+         * In the inner loop, moving one step in j moves out_cols positions
+         * forward in the output. For the unrolled offsets (j+1, j+2 ... j+5),
+         * we need 1×, 2×, 3×, 4×, 5× out_cols as offsets from the base
+         * output index. Computing these here saves 5 multiplications per
+         * outer iteration (100 outer iterations × 5 = 500 multiplications
+         * saved for the 100×784 matrix).                                */
+        long int s1 = out_cols;
+        long int s2 = 2L * out_cols;
+        long int s3 = 3L * out_cols;
+        long int s4 = 4L * out_cols;
+        long int s5 = 5L * out_cols;
+        long int s6 = 6L * out_cols;   /* stride for advancing out_idx  */
+
+        int i, j;
+
+        for (i = 0; i < rows; i++) {
+
+            /* CHANGE 3: hoist input row offset — same as matrix_vector_mult.
+             * Avoids recomputing i*cols on every inner iteration.         */
+            long int row_offset = (long int)i * cols;
+
+            /* CHANGE 4: incremental output index replaces j*out_cols + i.
+             * Original: m_out_start[j*out_cols + i] — 1 multiply per step.
+             * Optimized: out_idx starts at column i of the output (row 0),
+             * and advances by out_cols each j step — 1 add per step.
+             * Invariant: out_idx == i + j*out_cols at all times.          */
+            long int out_idx = (long int)i;
+
+            /* CHANGE 5: 6x unrolled inner loop.
+             * Each iteration reads 6 consecutive elements from input row i
+             * and writes them to 6 consecutive rows of output column i.
+             * The precomputed s1..s5 offsets index those 6 output rows
+             * from the base out_idx without any multiplication.
+             * out_idx advances by s6 = 6*out_cols at the end of each
+             * iteration to stay aligned with j.
+             * Bound (cols-5) ensures j+5 is always a valid index.
+             * For cols=784: runs j=0,6,...,774 (130 iters, covers 0-779),
+             * leaving 4 elements (j=780..783) for the cleanup loop.      */
+            for (j = 0; j < cols - 5; j += 6, out_idx += s6) {
+                m_out_start[out_idx]      = m_start[row_offset + j];
+                m_out_start[out_idx + s1] = m_start[row_offset + j + 1];
+                m_out_start[out_idx + s2] = m_start[row_offset + j + 2];
+                m_out_start[out_idx + s3] = m_start[row_offset + j + 3];
+                m_out_start[out_idx + s4] = m_start[row_offset + j + 4];
+                m_out_start[out_idx + s5] = m_start[row_offset + j + 5];
+            }
+
+            /* Scalar cleanup: handles remaining 0-5 elements.
+             * out_idx is correctly positioned at i + j*out_cols here
+             * since it was incremented by s6 in sync with j.
+             * For cols=784: j=780, fires 4 times (j=780,781,782,783).
+             * For cols=100: j= 96, fires 4 times (j=96,97,98,99).       */
+            for (; j < cols; j++, out_idx += out_cols) {
+                m_out_start[out_idx] = m_start[row_offset + j];
+            }
+        }
+        return 1;
+    }
+
+    return 0;
+}
+
+int kernel_matrix_scalar_mult(matrix_ptr m, data_t scalar, matrix_ptr m_out) {
+    long int rows = get_matrix_rows(m);
+    long int cols = get_matrix_cols(m);
+    long int out_rows = get_matrix_rows(m_out);
+    long int out_cols = get_matrix_cols(m_out);
+
+    data_t* m_start = get_matrix_start(m);
+    data_t* m_out_start = get_matrix_start(m_out);
+
+    __m256 scalar_vec = _mm256_set1_ps(scalar);
+
+    int i, j;
+
+    if(rows == out_rows && cols == out_cols){
+        for(i = 0; i < rows; i++) {
+            int row_offset = i*cols;
+
+            for (j = 0; j < cols - (AVX_STRIDE - 1); j += AVX_STRIDE) {
+                __m256 in = _mm256_loadu_ps(&m_start[row_offset + j]);
+
+                __m256 out = _mm256_mul_ps(scalar_vec, in);
+
+                _mm256_storeu_ps(&m_out_start[row_offset + j], out);
+            }
+
+            for (; j < cols; j++) {
+                m_out_start[row_offset + j] = scalar * m_start[row_offset + j];
+            }
+        }
+        return 1;
+    }
+    return 0;   
+}

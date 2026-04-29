@@ -224,3 +224,14 @@ output_max vector_max(array_ptr v){
   return result;
 
 }
+
+void sigmoid_arr(array_ptr v) {
+  for (int i = 0; i < v->len; i++) v->data[i] = sigmoid(v->data[i]);
+}
+
+void sigmoid_prime_arr(array_ptr v) {
+  for (int i = 0; i < v->len; i++) v->data[i] = sigmoid_prime(v->data[i]);
+}
+
+data_t sigmoid(data_t z)       { return 1 / (1 + expf(-z)); }
+data_t sigmoid_prime(data_t z) { return sigmoid(z) * (1 - sigmoid(z)); }

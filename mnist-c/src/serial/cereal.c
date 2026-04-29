@@ -230,9 +230,9 @@ void train_MNIST(dataset_ptr train_data) {
         kernel_matrix_matrix_add(ts->H0_W_grad_sum, s->H0_W_grad, ts->H0_W_grad_sum);
         kernel_matrix_matrix_add(ts->H1_W_grad_sum, s->H1_W_grad, ts->H1_W_grad_sum);
         kernel_matrix_matrix_add(ts->L_W_grad_sum,  s->L_W_grad,  ts->L_W_grad_sum);
-        vector_vector_add(ts->H0_B_grad_sum, s->H0_B_grad, ts->H0_B_grad_sum);
-        vector_vector_add(ts->H1_B_grad_sum, s->H1_B_grad, ts->H1_B_grad_sum);
-        vector_vector_add(ts->L_B_grad_sum,  s->L_B_grad,  ts->L_B_grad_sum);
+        kernel_vector_vector_add(ts->H0_B_grad_sum, s->H0_B_grad, ts->H0_B_grad_sum);
+        kernel_vector_vector_add(ts->H1_B_grad_sum, s->H1_B_grad, ts->H1_B_grad_sum);
+        kernel_vector_vector_add(ts->L_B_grad_sum,  s->L_B_grad,  ts->L_B_grad_sum);
       }
       // ===== END PARALLEL REGION (implicit barrier) =====
 
@@ -241,26 +241,26 @@ void train_MNIST(dataset_ptr train_data) {
         kernel_matrix_matrix_add(H0_W_grad_sum, thread_sums[t].H0_W_grad_sum, H0_W_grad_sum);
         kernel_matrix_matrix_add(H1_W_grad_sum, thread_sums[t].H1_W_grad_sum, H1_W_grad_sum);
         kernel_matrix_matrix_add(L_W_grad_sum,  thread_sums[t].L_W_grad_sum,  L_W_grad_sum);
-        vector_vector_add(H0_B_grad_sum, thread_sums[t].H0_B_grad_sum, H0_B_grad_sum);
-        vector_vector_add(H1_B_grad_sum, thread_sums[t].H1_B_grad_sum, H1_B_grad_sum);
-        vector_vector_add(L_B_grad_sum,  thread_sums[t].L_B_grad_sum,  L_B_grad_sum);
+        kernel_vector_vector_add(H0_B_grad_sum, thread_sums[t].H0_B_grad_sum, H0_B_grad_sum);
+        kernel_vector_vector_add(H1_B_grad_sum, thread_sums[t].H1_B_grad_sum, H1_B_grad_sum);
+        kernel_vector_vector_add(L_B_grad_sum,  thread_sums[t].L_B_grad_sum,  L_B_grad_sum);
         zero_thread_sums(&thread_sums[t]);  // reset for next batch
       }
 
       // ===== SERIAL: scale, negate, apply to weights/biases =====
       data_t reciprocalBatchSize = 1.0 / BATCH_SIZE;
 
-      matrix_scalar_mult(H0_W_grad_sum, reciprocalBatchSize, H0_W_grad_sum);
-      matrix_scalar_mult(H0_W_grad_sum, (data_t)LEARN_RATE,  H0_W_grad_sum);
-      matrix_scalar_mult(H0_W_grad_sum, -1.0,                H0_W_grad_sum);
+      kernel_matrix_scalar_mult(H0_W_grad_sum, reciprocalBatchSize, H0_W_grad_sum);
+      kernel_matrix_scalar_mult(H0_W_grad_sum, (data_t)LEARN_RATE,  H0_W_grad_sum);
+      kernel_matrix_scalar_mult(H0_W_grad_sum, -1.0,                H0_W_grad_sum);
 
-      matrix_scalar_mult(H1_W_grad_sum, reciprocalBatchSize, H1_W_grad_sum);
-      matrix_scalar_mult(H1_W_grad_sum, (data_t)LEARN_RATE,  H1_W_grad_sum);
-      matrix_scalar_mult(H1_W_grad_sum, -1.0,                H1_W_grad_sum);
+      kernel_matrix_scalar_mult(H1_W_grad_sum, reciprocalBatchSize, H1_W_grad_sum);
+      kernel_matrix_scalar_mult(H1_W_grad_sum, (data_t)LEARN_RATE,  H1_W_grad_sum);
+      kernel_matrix_scalar_mult(H1_W_grad_sum, -1.0,                H1_W_grad_sum);
 
-      matrix_scalar_mult(L_W_grad_sum, reciprocalBatchSize, L_W_grad_sum);
-      matrix_scalar_mult(L_W_grad_sum, (data_t)LEARN_RATE,  L_W_grad_sum);
-      matrix_scalar_mult(L_W_grad_sum, -1.0,                L_W_grad_sum);
+      kernel_matrix_scalar_mult(L_W_grad_sum, reciprocalBatchSize, L_W_grad_sum);
+      kernel_matrix_scalar_mult(L_W_grad_sum, (data_t)LEARN_RATE,  L_W_grad_sum);
+      kernel_matrix_scalar_mult(L_W_grad_sum, -1.0,                L_W_grad_sum);
 
       vector_scalar_mult(H0_B_grad_sum, reciprocalBatchSize, H0_B_grad_sum);
       vector_scalar_mult(H0_B_grad_sum, (data_t)LEARN_RATE,  H0_B_grad_sum);
@@ -277,9 +277,9 @@ void train_MNIST(dataset_ptr train_data) {
       kernel_matrix_matrix_add(H0_W_grad_sum, H0_W, H0_W);
       kernel_matrix_matrix_add(H1_W_grad_sum, H1_W, H1_W);
       kernel_matrix_matrix_add(L_W_grad_sum,  L_W,  L_W);
-      vector_vector_add(H0_B_grad_sum, H0_B, H0_B);
-      vector_vector_add(H1_B_grad_sum, H1_B, H1_B);
-      vector_vector_add(L_B_grad_sum,  L_B,  L_B);
+      kernel_vector_vector_add(H0_B_grad_sum, H0_B, H0_B);
+      kernel_vector_vector_add(H1_B_grad_sum, H1_B, H1_B);
+      kernel_vector_vector_add(L_B_grad_sum,  L_B,  L_B);
 
       zero_matrix(H0_W_grad_sum);
       zero_matrix(H1_W_grad_sum);
@@ -319,7 +319,7 @@ int backprop(SampleScratch *s, int num) {
   // OUTPUT LAYER
   zero_array(s->BP_y);
   s->BP_y->data[num] = -1.0;
-  if (!vector_vector_add(s->OUT, s->BP_y, s->BP_delCdelA_L)) return 0;
+  if (!kernel_vector_vector_add(s->OUT, s->BP_y, s->BP_delCdelA_L)) return 0;
 
   if (!vector_copy(s->L_Z, s->BP_delAdelZ_L)) return 0;
   sigmoid_prime_arr(s->BP_delAdelZ_L);
@@ -327,7 +327,7 @@ int backprop(SampleScratch *s, int num) {
   if (!vector_vector_elementwise_mult(s->BP_delAdelZ_L, s->BP_delCdelA_L, s->L_B_grad)) return 0;
   if (!kernel_vector_vector_mult(s->L_B_grad, s->H1, s->L_W_grad)) return 0;
 
-  if (!matrix_transpose(L_W, s->BP_W_T_L)) return 0;       // L_W is SHARED (read-only)
+  if (!kernel_matrix_transpose(L_W, s->BP_W_T_L)) return 0;       // L_W is SHARED (read-only)
   if (!kernel_matrix_vector_mult(s->BP_W_T_L, s->L_B_grad, s->H1_A_grad)) return 0;
 
   // HIDDEN LAYER 1
@@ -338,7 +338,7 @@ int backprop(SampleScratch *s, int num) {
   if (!vector_vector_elementwise_mult(s->BP_delAdelZ_H1, s->BP_delCdelA_H1, s->H1_B_grad)) return 0;
   if (!kernel_vector_vector_mult(s->H1_B_grad, s->H0, s->H1_W_grad)) return 0;
 
-  if (!matrix_transpose(H1_W, s->BP_W_T_H1)) return 0;     // H1_W is SHARED (read-only)
+  if (!kernel_matrix_transpose(H1_W, s->BP_W_T_H1)) return 0;     // H1_W is SHARED (read-only)
   if (!kernel_matrix_vector_mult(s->BP_W_T_H1, s->H1_B_grad, s->H0_A_grad)) return 0;
 
   // HIDDEN LAYER 0
@@ -355,36 +355,27 @@ int backprop(SampleScratch *s, int num) {
 void feedforward(SampleScratch *s) {
   // IN -> H0    (H0_W and H0_B are SHARED, read-only here)
   kernel_matrix_vector_mult(H0_W, s->IN, s->H0_mvm_res);
-  vector_vector_add(H0_B, s->H0_mvm_res, s->H0_z_temp);
+  kernel_vector_vector_add(H0_B, s->H0_mvm_res, s->H0_z_temp);
   vector_copy(s->H0_z_temp, s->H0_Z);
   sigmoid_arr(s->H0_z_temp);
   vector_copy(s->H0_z_temp, s->H0);
 
   // H0 -> H1
   kernel_matrix_vector_mult(H1_W, s->H0, s->H1_mvm_res);
-  vector_vector_add(H1_B, s->H1_mvm_res, s->H1_z_temp);
+  kernel_vector_vector_add(H1_B, s->H1_mvm_res, s->H1_z_temp);
   vector_copy(s->H1_z_temp, s->H1_Z);
   sigmoid_arr(s->H1_z_temp);
   vector_copy(s->H1_z_temp, s->H1);
 
   // H1 -> OUT
   kernel_matrix_vector_mult(L_W, s->H1, s->L_mvm_res);
-  vector_vector_add(L_B, s->L_mvm_res, s->L_z_temp);
+  kernel_vector_vector_add(L_B, s->L_mvm_res, s->L_z_temp);
   vector_copy(s->L_z_temp, s->L_Z);
   sigmoid_arr(s->L_z_temp);
   vector_copy(s->L_z_temp, s->OUT);
 }
 
-void sigmoid_arr(array_ptr v) {
-  for (int i = 0; i < v->len; i++) v->data[i] = sigmoid(v->data[i]);
-}
 
-void sigmoid_prime_arr(array_ptr v) {
-  for (int i = 0; i < v->len; i++) v->data[i] = sigmoid_prime(v->data[i]);
-}
-
-data_t sigmoid(data_t z)       { return 1 / (1 + expf(-z)); }
-data_t sigmoid_prime(data_t z) { return sigmoid(z) * (1 - sigmoid(z)); }
 
 array_ptr numToVec(int num) {
   array_ptr result = new_array(L_SIZE);
