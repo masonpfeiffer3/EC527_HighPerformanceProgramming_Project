@@ -294,52 +294,40 @@ void test_MNIST(dataset_ptr test_data) {
 // =====================================================================
 
 int backprop(SampleScratch *s, int num) {
+  // OUTPUT LAYER
+  zero_array(s->BP_y);
+  s->BP_y->data[num] = -1.0;
+  if (!vector_vector_add(s->OUT, s->BP_y, s->BP_delCdelA_L)) return 0;
 
-    /* --- OUTPUT LAYER (see Fusion 4 for output gradient simplification) --- */
-    /* FUSED: cost gradient = OUT - one_hot(num), directly computed.
-    * No zero_array, no BP_y buffer, no separate vector_add.
-    * BP_y and BP_delAdelZ_L buffers eliminated entirely.            */
-    data_t* restrict out_data   = get_array_start(s->OUT);
-    data_t* restrict L_Z_data   = get_array_start(s->L_Z);
-    data_t* restrict L_B_grad_d = get_array_start(s->L_B_grad);
+  if (!vector_copy(s->L_Z, s->BP_delAdelZ_L)) return 0;
+  sigmoid_prime_arr(s->BP_delAdelZ_L);
 
-    for (int i = 0; i < L_SIZE; i++) {
-        float dCdA  = out_data[i] - (i == num ? 1.0f : 0.0f);  /* cost gradient */
-        L_B_grad_d[i] = sigmoid_prime(L_Z_data[i]) * dCdA;     /* fused with Fusion 3 */
-    }
+  if (!vector_vector_elementwise_mult(s->BP_delAdelZ_L, s->BP_delCdelA_L, s->L_B_grad)) return 0;
+  if (!kernel_vector_vector_mult(s->L_B_grad, s->H1, s->L_W_grad)) return 0;
 
-    /* L_W_grad = outer product L_B_grad ⊗ H1 (unchanged) */
-    if (!kernel_vector_vector_mult(s->L_B_grad, s->H1, s->L_W_grad)) return 0;
-    /* --- HIDDEN LAYER 1 --- */
+  if (!matrix_transpose(L_W, s->BP_W_T_L)) return 0;       // L_W is SHARED (read-only)
+  if (!kernel_matrix_vector_mult(s->BP_W_T_L, s->L_B_grad, s->H1_A_grad)) return 0;
 
-    data_t* restrict H1_A_grad = get_array_start(s->H1_A_grad);
-    data_t* restrict H1_Z      = get_array_start(s->H1_Z);
-    data_t* restrict H1_B_grad = get_array_start(s->H1_B_grad);
+  // HIDDEN LAYER 1
+  if (!vector_copy(s->H1_A_grad, s->BP_delCdelA_H1)) return 0;
+  if (!vector_copy(s->H1_Z, s->BP_delAdelZ_H1)) return 0;
+  sigmoid_prime_arr(s->BP_delAdelZ_H1);
 
-    /* FUSED: sigmoid_prime(H1_Z) * H1_A_grad in one pass.
-     * Replaces: 2× copy + sigmoid_prime_arr + elementwise_mult
-     * BP_delCdelA_H1 and BP_delAdelZ_H1 buffers eliminated entirely.
-     * Same AI improvement as Fusion 2: sigmoid_prime adds ~20 FLOPs/elem. */
-    for (int i = 0; i < H1_SIZE; i++) {
-        H1_B_grad[i] = sigmoid_prime(H1_Z[i]) * H1_A_grad[i];
-    }
+  if (!vector_vector_elementwise_mult(s->BP_delAdelZ_H1, s->BP_delCdelA_H1, s->H1_B_grad)) return 0;
+  if (!kernel_vector_vector_mult(s->H1_B_grad, s->H0, s->H1_W_grad)) return 0;
 
-    /* H1_W_grad = outer product H1_B_grad ⊗ H0 (unchanged) */
-    if (!kernel_vector_vector_mult(s->H1_B_grad, s->H0, s->H1_W_grad)) return 0;
+  if (!matrix_transpose(H1_W, s->BP_W_T_H1)) return 0;     // H1_W is SHARED (read-only)
+  if (!matrix_vector_mult(s->BP_W_T_H1, s->H1_B_grad, s->H0_A_grad)) return 0;
 
-    /* --- HIDDEN LAYER 0 --- */
+  // HIDDEN LAYER 0
+  if (!vector_copy(s->H0_A_grad, s->BP_delCdelA_H0)) return 0;
+  if (!vector_copy(s->H0_Z, s->BP_delAdelZ_H0)) return 0;
+  sigmoid_prime_arr(s->BP_delAdelZ_H0);
 
-    data_t* restrict H0_A_grad = get_array_start(s->H0_A_grad);
-    data_t* restrict H0_Z      = get_array_start(s->H0_Z);
-    data_t* restrict H0_B_grad = get_array_start(s->H0_B_grad);
+  if (!vector_vector_elementwise_mult(s->BP_delAdelZ_H0, s->BP_delCdelA_H0, s->H0_B_grad)) return 0;
+  if (!kernel_vector_vector_mult(s->H0_B_grad, s->IN, s->H0_W_grad)) return 0;
 
-    for (int i = 0; i < H0_SIZE; i++) {
-        H0_B_grad[i] = sigmoid_prime(H0_Z[i]) * H0_A_grad[i];
-    }
-
-    if (!kernel_vector_vector_mult(s->H0_B_grad, s->IN, s->H0_W_grad)) return 0;
-
-    return 1;
+  return 1;
 }
 
 void feedforward(SampleScratch *s) {
