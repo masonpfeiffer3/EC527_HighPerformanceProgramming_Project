@@ -439,7 +439,6 @@ int kernel_gemm_forward(matrix_ptr A, matrix_ptr B, matrix_ptr C, int actual_S) 
 #define T_O_WG 4
 
 int kernel_gemm_weight_grad(matrix_ptr delta, matrix_ptr act, matrix_ptr dW, int actual_S) {
-
     long int out_dim = get_matrix_cols(delta);
     long int in_dim  = get_matrix_cols(act);
 
@@ -450,67 +449,108 @@ int kernel_gemm_weight_grad(matrix_ptr delta, matrix_ptr act, matrix_ptr dW, int
     data_t* restrict gw = get_matrix_start(dW);
 
     long int o;
-
-    /* Tiled: process T_O_WG dW rows per pass over s and in_dim. */
+    /* Main Tiled Rows (T_O_WG = 4) */
     for (o = 0; o + T_O_WG <= out_dim; o += T_O_WG) {
         long int dw0 = o       * in_dim;
         long int dw1 = (o + 1) * in_dim;
         long int dw2 = (o + 2) * in_dim;
         long int dw3 = (o + 3) * in_dim;
 
-        for (int s = 0; s < actual_S; s++) {
-            long int a_row = (long int)s * in_dim;
-            long int d_row = (long int)s * out_dim;
+        long int j;
+        /* 1. Primary Unrolled Loop (2 * AVX_STRIDE = 16) */
+        for (j = 0; j + (2 * AVX_STRIDE) <= in_dim; j += 2 * AVX_STRIDE) {
+            __m256 g0a = _mm256_loadu_ps(&gw[dw0 + j]);
+            __m256 g0b = _mm256_loadu_ps(&gw[dw0 + j + AVX_STRIDE]);
+            __m256 g1a = _mm256_loadu_ps(&gw[dw1 + j]);
+            __m256 g1b = _mm256_loadu_ps(&gw[dw1 + j + AVX_STRIDE]);
+            __m256 g2a = _mm256_loadu_ps(&gw[dw2 + j]);
+            __m256 g2b = _mm256_loadu_ps(&gw[dw2 + j + AVX_STRIDE]);
+            __m256 g3a = _mm256_loadu_ps(&gw[dw3 + j]);
+            __m256 g3b = _mm256_loadu_ps(&gw[dw3 + j + AVX_STRIDE]);
 
-            data_t d0 = d[d_row + o];
-            data_t d1 = d[d_row + o + 1];
-            data_t d2 = d[d_row + o + 2];
-            data_t d3 = d[d_row + o + 3];
+            for (int s = 0; s < actual_S; s++) {
+                long int a_row = (long int)s * in_dim;
+                long int d_row = (long int)s * out_dim;
 
-            __m256 dv0 = _mm256_set1_ps(d0);
-            __m256 dv1 = _mm256_set1_ps(d1);
-            __m256 dv2 = _mm256_set1_ps(d2);
-            __m256 dv3 = _mm256_set1_ps(d3);
+                __m256 dv0 = _mm256_set1_ps(d[d_row + o]);
+                __m256 dv1 = _mm256_set1_ps(d[d_row + o + 1]);
+                __m256 dv2 = _mm256_set1_ps(d[d_row + o + 2]);
+                __m256 dv3 = _mm256_set1_ps(d[d_row + o + 3]);
 
-            long int j;
-            for (j = 0; j < in_dim - (AVX_STRIDE - 1); j += AVX_STRIDE) {
+                __m256 av_a = _mm256_loadu_ps(&a[a_row + j]);
+                __m256 av_b = _mm256_loadu_ps(&a[a_row + j + AVX_STRIDE]);
+
+                g0a = _mm256_fmadd_ps(dv0, av_a, g0a);
+                g0b = _mm256_fmadd_ps(dv0, av_b, g0b);
+                g1a = _mm256_fmadd_ps(dv1, av_a, g1a);
+                g1b = _mm256_fmadd_ps(dv1, av_b, g1b);
+                g2a = _mm256_fmadd_ps(dv2, av_a, g2a);
+                g2b = _mm256_fmadd_ps(dv2, av_b, g2b);
+                g3a = _mm256_fmadd_ps(dv3, av_a, g3a);
+                g3b = _mm256_fmadd_ps(dv3, av_b, g3b);
+            }
+            _mm256_storeu_ps(&gw[dw0 + j], g0a);
+            _mm256_storeu_ps(&gw[dw0 + j + AVX_STRIDE], g0b);
+            _mm256_storeu_ps(&gw[dw1 + j], g1a);
+            _mm256_storeu_ps(&gw[dw1 + j + AVX_STRIDE], g1b);
+            _mm256_storeu_ps(&gw[dw2 + j], g2a);
+            _mm256_storeu_ps(&gw[dw2 + j + AVX_STRIDE], g2b);
+            _mm256_storeu_ps(&gw[dw3 + j], g3a);
+            _mm256_storeu_ps(&gw[dw3 + j + AVX_STRIDE], g3b);
+        }
+
+        /* 2. Single Vector Remainder (8 elements) */
+        for (; j + AVX_STRIDE <= in_dim; j += AVX_STRIDE) {
+            __m256 g0 = _mm256_loadu_ps(&gw[dw0 + j]);
+            __m256 g1 = _mm256_loadu_ps(&gw[dw1 + j]);
+            __m256 g2 = _mm256_loadu_ps(&gw[dw2 + j]);
+            __m256 g3 = _mm256_loadu_ps(&gw[dw3 + j]);
+
+            for (int s = 0; s < actual_S; s++) {
+                long int a_row = (long int)s * in_dim;
+                long int d_row = (long int)s * out_dim;
                 __m256 av = _mm256_loadu_ps(&a[a_row + j]);
-                _mm256_storeu_ps(&gw[dw0 + j],
-                    _mm256_fmadd_ps(dv0, av, _mm256_loadu_ps(&gw[dw0 + j])));
-                _mm256_storeu_ps(&gw[dw1 + j],
-                    _mm256_fmadd_ps(dv1, av, _mm256_loadu_ps(&gw[dw1 + j])));
-                _mm256_storeu_ps(&gw[dw2 + j],
-                    _mm256_fmadd_ps(dv2, av, _mm256_loadu_ps(&gw[dw2 + j])));
-                _mm256_storeu_ps(&gw[dw3 + j],
-                    _mm256_fmadd_ps(dv3, av, _mm256_loadu_ps(&gw[dw3 + j])));
+                g0 = _mm256_fmadd_ps(_mm256_set1_ps(d[d_row + o]), av, g0);
+                g1 = _mm256_fmadd_ps(_mm256_set1_ps(d[d_row + o + 1]), av, g1);
+                g2 = _mm256_fmadd_ps(_mm256_set1_ps(d[d_row + o + 2]), av, g2);
+                g3 = _mm256_fmadd_ps(_mm256_set1_ps(d[d_row + o + 3]), av, g3);
             }
-            for (; j < in_dim; j++) {
-                data_t av = a[a_row + j];
-                gw[dw0 + j] += d0 * av;
-                gw[dw1 + j] += d1 * av;
-                gw[dw2 + j] += d2 * av;
-                gw[dw3 + j] += d3 * av;
+            _mm256_storeu_ps(&gw[dw0 + j], g0);
+            _mm256_storeu_ps(&gw[dw1 + j], g1);
+            _mm256_storeu_ps(&gw[dw2 + j], g2);
+            _mm256_storeu_ps(&gw[dw3 + j], g3);
+        }
+
+        /* 3. Scalar Remainder (Final 1-7 elements) */
+        for (; j < in_dim; j++) {
+            data_t sum0 = 0, sum1 = 0, sum2 = 0, sum3 = 0;
+            for (int s = 0; s < actual_S; s++) {
+                data_t av = a[(long int)s * in_dim + j];
+                long int d_row = (long int)s * out_dim;
+                sum0 += d[d_row + o] * av;
+                sum1 += d[d_row + o + 1] * av;
+                sum2 += d[d_row + o + 2] * av;
+                sum3 += d[d_row + o + 3] * av;
             }
+            gw[dw0 + j] += sum0;
+            gw[dw1 + j] += sum1;
+            gw[dw2 + j] += sum2;
+            gw[dw3 + j] += sum3;
         }
     }
 
-    /* Remainder: output neurons that do not fill a full tile */
+    /* 4. Final Rows Remainder (If out_dim % 4 != 0) */
     for (; o < out_dim; o++) {
         long int dw_row = o * in_dim;
-        for (int s = 0; s < actual_S; s++) {
-            data_t d_so  = d[(long int)s * out_dim + o];
-            __m256 d_vec = _mm256_set1_ps(d_so);
-            long int a_row = (long int)s * in_dim;
-            long int j;
-            for (j = 0; j < in_dim - (AVX_STRIDE - 1); j += AVX_STRIDE) {
-                __m256 wv = _mm256_loadu_ps(&gw[dw_row + j]);
-                __m256 av = _mm256_loadu_ps(&a[a_row + j]);
-                _mm256_storeu_ps(&gw[dw_row + j], _mm256_fmadd_ps(d_vec, av, wv));
+        for (long int j = 0; j < in_dim; j++) {
+            data_t sum = 0;
+            for (int s = 0; s < actual_S; s++) {
+                sum += d[(long int)s * out_dim + o] * a[(long int)s * in_dim + j];
             }
-            for (; j < in_dim; j++)
-                gw[dw_row + j] += d_so * a[a_row + j];
+            gw[dw_row + j] += sum;
         }
     }
+
     return 1;
 }
 
