@@ -249,15 +249,37 @@ void train_MNIST(dataset_ptr train_data) {
 
       // ===== SERIAL: scale, negate, apply to weights/biases =====
       data_t reciprocalBatchSize = 1.0 / BATCH_SIZE;
-      data_t scale = -LEARN_RATE*reciprocalBatchSize;
 
-      kernel_matrix_saxpy(H0_W_grad_sum, scale, H0_W);
-      kernel_matrix_saxpy(H1_W_grad_sum, scale, H1_W);
-      kernel_matrix_saxpy(L_W_grad_sum, scale, L_W);
-      
-      kernel_vector_saxpy(H0_B_grad_sum, scale, H0_B);
-      kernel_vector_saxpy(H1_B_grad_sum, scale, H1_B);
-      kernel_vector_saxpy(L_B_grad_sum, scale, L_B);
+      matrix_scalar_mult(H0_W_grad_sum, reciprocalBatchSize, H0_W_grad_sum);
+      matrix_scalar_mult(H0_W_grad_sum, (data_t)LEARN_RATE,  H0_W_grad_sum);
+      matrix_scalar_mult(H0_W_grad_sum, -1.0,                H0_W_grad_sum);
+
+      matrix_scalar_mult(H1_W_grad_sum, reciprocalBatchSize, H1_W_grad_sum);
+      matrix_scalar_mult(H1_W_grad_sum, (data_t)LEARN_RATE,  H1_W_grad_sum);
+      matrix_scalar_mult(H1_W_grad_sum, -1.0,                H1_W_grad_sum);
+
+      matrix_scalar_mult(L_W_grad_sum, reciprocalBatchSize, L_W_grad_sum);
+      matrix_scalar_mult(L_W_grad_sum, (data_t)LEARN_RATE,  L_W_grad_sum);
+      matrix_scalar_mult(L_W_grad_sum, -1.0,                L_W_grad_sum);
+
+      vector_scalar_mult(H0_B_grad_sum, reciprocalBatchSize, H0_B_grad_sum);
+      vector_scalar_mult(H0_B_grad_sum, (data_t)LEARN_RATE,  H0_B_grad_sum);
+      vector_scalar_mult(H0_B_grad_sum, -1.0,                H0_B_grad_sum);
+
+      vector_scalar_mult(H1_B_grad_sum, reciprocalBatchSize, H1_B_grad_sum);
+      vector_scalar_mult(H1_B_grad_sum, (data_t)LEARN_RATE,  H1_B_grad_sum);
+      vector_scalar_mult(H1_B_grad_sum, -1.0,                H1_B_grad_sum);
+
+      vector_scalar_mult(L_B_grad_sum, reciprocalBatchSize, L_B_grad_sum);
+      vector_scalar_mult(L_B_grad_sum, (data_t)LEARN_RATE,  L_B_grad_sum);
+      vector_scalar_mult(L_B_grad_sum, -1.0,                L_B_grad_sum);
+
+      kernel_matrix_matrix_add(H0_W_grad_sum, H0_W, H0_W);
+      matrix_matrix_add(H1_W_grad_sum, H1_W, H1_W);
+      matrix_matrix_add(L_W_grad_sum,  L_W,  L_W);
+      vector_vector_add(H0_B_grad_sum, H0_B, H0_B);
+      vector_vector_add(H1_B_grad_sum, H1_B, H1_B);
+      vector_vector_add(L_B_grad_sum,  L_B,  L_B);
 
       zero_matrix(H0_W_grad_sum);
       zero_matrix(H1_W_grad_sum);
