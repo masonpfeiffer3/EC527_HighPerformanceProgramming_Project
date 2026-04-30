@@ -247,11 +247,11 @@ void train_MNIST(dataset_ptr train_data) {
                                  thread_sums[t].H1_W_grad_sum, H1_W_grad_sum);
         kernel_matrix_matrix_add(L_W_grad_sum,
                                  thread_sums[t].L_W_grad_sum,  L_W_grad_sum);
-        kernel_vector_vector_add(H0_B_grad_sum,
+        vector_vector_add(H0_B_grad_sum,
                                  thread_sums[t].H0_B_grad_sum, H0_B_grad_sum);
-        kernel_vector_vector_add(H1_B_grad_sum,
+        vector_vector_add(H1_B_grad_sum,
                                  thread_sums[t].H1_B_grad_sum, H1_B_grad_sum);
-        kernel_vector_vector_add(L_B_grad_sum,
+        vector_vector_add(L_B_grad_sum,
                                  thread_sums[t].L_B_grad_sum,  L_B_grad_sum);
         zero_thread_sums(&thread_sums[t]);  // reset for next batch
       }
@@ -345,7 +345,7 @@ int backprop(SampleScratch *s, ThreadGradSum *ts, int num) {
   }
 
   // Propagate error to H1: H1_A_grad = L_W^T * delta_L
-  if (!kernel_matrix_transpose(L_W, s->BP_W_T_L)) return 0; // L_W is SHARED
+  if (!matrix_transpose(L_W, s->BP_W_T_L)) return 0; // L_W is SHARED
   if (!kernel_matrix_vector_mult(s->BP_W_T_L, s->L_B_grad, s->H1_A_grad)) return 0;
 
   // ------------------------------------------------------------------
@@ -384,7 +384,7 @@ int backprop(SampleScratch *s, ThreadGradSum *ts, int num) {
   }
 
   // Propagate error to H0: H0_A_grad = H1_W^T * delta_H1
-  if (!kernel_matrix_transpose(H1_W, s->BP_W_T_H1)) return 0; // H1_W is SHARED
+  if (!matrix_transpose(H1_W, s->BP_W_T_H1)) return 0; // H1_W is SHARED
   if (!kernel_matrix_vector_mult(s->BP_W_T_H1, s->H1_B_grad, s->H0_A_grad)) return 0;
 
   // ------------------------------------------------------------------
