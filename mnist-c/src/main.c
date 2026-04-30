@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <time.h>
 #include "mnist_loader.h"
-#include "serial/cereal.h"
+#include "claude_parallel/cereal.h"
 #include "params.h"
 
 int main() {
@@ -12,7 +12,7 @@ int main() {
 
     struct timespec prog_start, prog_end;
     clock_gettime(CLOCK_MONOTONIC, &prog_start);
-    serial_MNIST(train_data, test_data);
+    parallel_MNIST(train_data, test_data);
     clock_gettime(CLOCK_MONOTONIC, &prog_end);
     printf("Total: %.4f s\n", (prog_end.tv_sec - prog_start.tv_sec) + (prog_end.tv_nsec - prog_start.tv_nsec) / 1e9);
 
