@@ -325,7 +325,7 @@ int backprop(SampleScratch *s, int num) {
   sigmoid_prime_arr(s->BP_delAdelZ_L);
 
   if (!vector_vector_elementwise_mult(s->BP_delAdelZ_L, s->BP_delCdelA_L, s->L_B_grad)) return 0;
-  if (!kernel_vector_vector_mult(s->L_B_grad, s->H1, s->L_W_grad)) return 0;
+  if (!vector_vector_mult(s->L_B_grad, s->H1, s->L_W_grad)) return 0;
 
   if (!matrix_transpose(L_W, s->BP_W_T_L)) return 0;       // L_W is SHARED (read-only)
   if (!kernel_matrix_vector_mult(s->BP_W_T_L, s->L_B_grad, s->H1_A_grad)) return 0;
@@ -347,7 +347,7 @@ int backprop(SampleScratch *s, int num) {
   sigmoid_prime_arr(s->BP_delAdelZ_H0);
 
   if (!vector_vector_elementwise_mult(s->BP_delAdelZ_H0, s->BP_delCdelA_H0, s->H0_B_grad)) return 0;
-  if (!vector_vector_mult(s->H0_B_grad, s->IN, s->H0_W_grad)) return 0;
+  if (!kernel_vector_vector_mult(s->H0_B_grad, s->IN, s->H0_W_grad)) return 0;
 
   return 1;
 }
