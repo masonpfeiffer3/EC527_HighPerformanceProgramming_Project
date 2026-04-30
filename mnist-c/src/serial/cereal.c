@@ -64,17 +64,14 @@ struct SampleScratch {
 // during the parallel region. After the region, we serially combine
 // these into the global sum used for the weight update.
 // =====================================================================
-typedef struct {
-  matrix_ptr H0_W_grad_sum, H1_W_grad_sum, L_W_grad_sum;
-  array_ptr  H0_B_grad_sum, H1_B_grad_sum, L_B_grad_sum;
-} ThreadGradSum;
+
 
 static SampleScratch  *scratch;       // size = NUM_THREADS
 static ThreadGradSum  *thread_sums;   // size = NUM_THREADS
 
 // Forward declarations -- updated signatures take a scratch pointer
 void feedforward(SampleScratch *s);
-int  backprop(SampleScratch *s, int num);
+int  backprop(SampleScratch *s, ThreadGradSum *ts, int num);
 static void alloc_scratch(SampleScratch *s);
 static void alloc_thread_sums(ThreadGradSum *t);
 static void zero_thread_sums(ThreadGradSum *t);
@@ -211,8 +208,11 @@ void train_MNIST(dataset_ptr train_data) {
     for (int i = 0; i < TRAIN_SIZE; i += BATCH_SIZE) {
 
       // ===== PARALLEL REGION: per-sample work =====
-      // Each thread processes a chunk of samples, accumulating gradients
-      // into its OWN thread_sums slot. No cross-thread writes.
+      // FUSION 5: backprop(s, ts, num) now accumulates ALL gradients
+      // (weight outer products and bias deltas) directly into ts.
+      // The six kernel_matrix_matrix_add / kernel_vector_vector_add
+      // calls that previously appeared after backprop() are gone;
+      // no gradient data is staged through a per-sample buffer anymore.
       #pragma omp parallel for schedule(static)
       for (int j = i; j < i + BATCH_SIZE; j++) {
         int tid = omp_get_thread_num();
@@ -223,16 +223,7 @@ void train_MNIST(dataset_ptr train_data) {
         int num = train_data->nums[indices[j]];
 
         feedforward(s);
-        backprop(s, num);
-
-        // Accumulate this sample's gradients into THIS THREAD's sum.
-        // Safe: no other thread touches ts.
-        kernel_matrix_matrix_add(ts->H0_W_grad_sum, s->H0_W_grad, ts->H0_W_grad_sum);
-        kernel_matrix_matrix_add(ts->H1_W_grad_sum, s->H1_W_grad, ts->H1_W_grad_sum);
-        kernel_matrix_matrix_add(ts->L_W_grad_sum,  s->L_W_grad,  ts->L_W_grad_sum);
-        vector_vector_add(ts->H0_B_grad_sum, s->H0_B_grad, ts->H0_B_grad_sum);
-        vector_vector_add(ts->H1_B_grad_sum, s->H1_B_grad, ts->H1_B_grad_sum);
-        vector_vector_add(ts->L_B_grad_sum,  s->L_B_grad,  ts->L_B_grad_sum);
+        backprop(s, ts, num);   // accumulates directly into ts -- no follow-up adds needed
       }
       // ===== END PARALLEL REGION (implicit barrier) =====
 
@@ -241,9 +232,9 @@ void train_MNIST(dataset_ptr train_data) {
         kernel_matrix_matrix_add(H0_W_grad_sum, thread_sums[t].H0_W_grad_sum, H0_W_grad_sum);
         kernel_matrix_matrix_add(H1_W_grad_sum, thread_sums[t].H1_W_grad_sum, H1_W_grad_sum);
         kernel_matrix_matrix_add(L_W_grad_sum,  thread_sums[t].L_W_grad_sum,  L_W_grad_sum);
-        vector_vector_add(H0_B_grad_sum, thread_sums[t].H0_B_grad_sum, H0_B_grad_sum);
-        vector_vector_add(H1_B_grad_sum, thread_sums[t].H1_B_grad_sum, H1_B_grad_sum);
-        vector_vector_add(L_B_grad_sum,  thread_sums[t].L_B_grad_sum,  L_B_grad_sum);
+        kernel_vector_vector_add(H0_B_grad_sum, thread_sums[t].H0_B_grad_sum, H0_B_grad_sum);
+        kernel_vector_vector_add(H1_B_grad_sum, thread_sums[t].H1_B_grad_sum, H1_B_grad_sum);
+        kernel_vector_vector_add(L_B_grad_sum,  thread_sums[t].L_B_grad_sum,  L_B_grad_sum);
         zero_thread_sums(&thread_sums[t]);  // reset for next batch
       }
 
@@ -293,39 +284,141 @@ void test_MNIST(dataset_ptr test_data) {
 
 // =====================================================================
 
-int backprop(SampleScratch *s, int num) {
+int backprop(SampleScratch *s, ThreadGradSum *ts, int num) {
+
+  // ------------------------------------------------------------------
   // OUTPUT LAYER
+  // ------------------------------------------------------------------
+
+  // delCdelA_L = OUT - y    (quadratic cost derivative)
   zero_array(s->BP_y);
   s->BP_y->data[num] = -1.0;
-  if (!vector_vector_add(s->OUT, s->BP_y, s->BP_delCdelA_L)) return 0;
+  if (!kernel_vector_vector_add(s->OUT, s->BP_y, s->BP_delCdelA_L)) return 0;
 
+  // delAdelZ_L = sigmoid'(L_Z)
   if (!vector_copy(s->L_Z, s->BP_delAdelZ_L)) return 0;
   sigmoid_prime_arr(s->BP_delAdelZ_L);
 
-  if (!vector_vector_elementwise_mult(s->BP_delAdelZ_L, s->BP_delCdelA_L, s->L_B_grad)) return 0;
-  if (!kernel_vector_vector_mult(s->L_B_grad, s->H1, s->L_W_grad)) return 0;
+  // delta_L = sigmoid'(L_Z) ⊙ (OUT - y)   --> L_B_grad
+  if (!vector_vector_elementwise_mult(s->BP_delAdelZ_L, s->BP_delCdelA_L,
+                                      s->L_B_grad)) return 0;
 
-  if (!matrix_transpose(L_W, s->BP_W_T_L)) return 0;       // L_W is SHARED (read-only)
+  // FUSION 5 -- accumulate L bias gradient directly into thread sum.
+  // Replaces: kernel_vector_vector_add(ts->L_B_grad_sum, s->L_B_grad,
+  //                                    ts->L_B_grad_sum)  in parallel region.
+  {
+    data_t * restrict bg  = get_array_start(s->L_B_grad);
+    data_t * restrict sum = get_array_start(ts->L_B_grad_sum);
+    for (int i = 0; i < L_SIZE; i++) {
+      sum[i] += bg[i];
+    }
+  }
+
+  // FUSION 5 -- rank-1 update: L_W_grad_sum[i][j] += delta_L[i] * H1[j]
+  // Replaces: kernel_vector_vector_mult(s->L_B_grad, s->H1, s->L_W_grad)
+  //     then: kernel_matrix_matrix_add(ts->L_W_grad_sum, s->L_W_grad,
+  //                                    ts->L_W_grad_sum)
+  {
+    data_t * restrict delta = get_array_start(s->L_B_grad);
+    data_t * restrict x     = get_array_start(s->H1);
+    data_t * restrict G     = get_matrix_start(ts->L_W_grad_sum);
+    for (int i = 0; i < L_SIZE; i++) {
+      data_t d = delta[i];
+      for (int j = 0; j < H1_SIZE; j++) {
+        G[i * H1_SIZE + j] += d * x[j];
+      }
+    }
+  }
+
+  // Propagate error to H1: H1_A_grad = L_W^T * delta_L
+  if (!kernel_matrix_transpose(L_W, s->BP_W_T_L)) return 0;       // L_W is SHARED (read-only)
   if (!kernel_matrix_vector_mult(s->BP_W_T_L, s->L_B_grad, s->H1_A_grad)) return 0;
 
+  // ------------------------------------------------------------------
   // HIDDEN LAYER 1
+  // ------------------------------------------------------------------
+
   if (!vector_copy(s->H1_A_grad, s->BP_delCdelA_H1)) return 0;
+
+  // delAdelZ_H1 = sigmoid'(H1_Z)
   if (!vector_copy(s->H1_Z, s->BP_delAdelZ_H1)) return 0;
   sigmoid_prime_arr(s->BP_delAdelZ_H1);
 
-  if (!vector_vector_elementwise_mult(s->BP_delAdelZ_H1, s->BP_delCdelA_H1, s->H1_B_grad)) return 0;
-  if (!kernel_vector_vector_mult(s->H1_B_grad, s->H0, s->H1_W_grad)) return 0;
+  // delta_H1 = sigmoid'(H1_Z) ⊙ delCdelA_H1   --> H1_B_grad
+  if (!vector_vector_elementwise_mult(s->BP_delAdelZ_H1, s->BP_delCdelA_H1,
+                                      s->H1_B_grad)) return 0;
 
-  if (!matrix_transpose(H1_W, s->BP_W_T_H1)) return 0;     // H1_W is SHARED (read-only)
-  if (!matrix_vector_mult(s->BP_W_T_H1, s->H1_B_grad, s->H0_A_grad)) return 0;
+  // FUSION 5 -- accumulate H1 bias gradient directly into thread sum.
+  {
+    data_t * restrict bg  = get_array_start(s->H1_B_grad);
+    data_t * restrict sum = get_array_start(ts->H1_B_grad_sum);
+    for (int i = 0; i < H1_SIZE; i++) {
+      sum[i] += bg[i];
+    }
+  }
 
+  // FUSION 5 -- rank-1 update: H1_W_grad_sum[i][j] += delta_H1[i] * H0[j]
+  // Replaces: kernel_vector_vector_mult(s->H1_B_grad, s->H0, s->H1_W_grad)
+  //     then: kernel_matrix_matrix_add(ts->H1_W_grad_sum, s->H1_W_grad,
+  //                                    ts->H1_W_grad_sum)
+  {
+    data_t * restrict delta = get_array_start(s->H1_B_grad);
+    data_t * restrict x     = get_array_start(s->H0);
+    data_t * restrict G     = get_matrix_start(ts->H1_W_grad_sum);
+    for (int i = 0; i < H1_SIZE; i++) {
+      data_t d = delta[i];
+      for (int j = 0; j < H0_SIZE; j++) {
+        G[i * H0_SIZE + j] += d * x[j];
+      }
+    }
+  }
+
+  // Propagate error to H0: H0_A_grad = H1_W^T * delta_H1
+  if (!kernel_matrix_transpose(H1_W, s->BP_W_T_H1)) return 0;     // H1_W is SHARED (read-only)
+  if (!kernel_matrix_vector_mult(s->BP_W_T_H1, s->H1_B_grad, s->H0_A_grad)) return 0;
+
+  // ------------------------------------------------------------------
   // HIDDEN LAYER 0
+  // ------------------------------------------------------------------
+
   if (!vector_copy(s->H0_A_grad, s->BP_delCdelA_H0)) return 0;
+
+  // delAdelZ_H0 = sigmoid'(H0_Z)
   if (!vector_copy(s->H0_Z, s->BP_delAdelZ_H0)) return 0;
   sigmoid_prime_arr(s->BP_delAdelZ_H0);
 
-  if (!vector_vector_elementwise_mult(s->BP_delAdelZ_H0, s->BP_delCdelA_H0, s->H0_B_grad)) return 0;
-  if (!kernel_vector_vector_mult(s->H0_B_grad, s->IN, s->H0_W_grad)) return 0;
+  // delta_H0 = sigmoid'(H0_Z) ⊙ delCdelA_H0   --> H0_B_grad
+  if (!vector_vector_elementwise_mult(s->BP_delAdelZ_H0, s->BP_delCdelA_H0,
+                                      s->H0_B_grad)) return 0;
+
+  // FUSION 5 -- accumulate H0 bias gradient directly into thread sum.
+  {
+    data_t * restrict bg  = get_array_start(s->H0_B_grad);
+    data_t * restrict sum = get_array_start(ts->H0_B_grad_sum);
+    for (int i = 0; i < H0_SIZE; i++) {
+      sum[i] += bg[i];
+    }
+  }
+
+  // FUSION 5 -- rank-1 update: H0_W_grad_sum[i][j] += delta_H0[i] * IN[j]
+  // This is the 100×784 dominant inner loop. Replaces:
+  //   kernel_vector_vector_mult(s->H0_B_grad, s->IN, s->H0_W_grad)
+  //   kernel_matrix_matrix_add(ts->H0_W_grad_sum, s->H0_W_grad,
+  //                             ts->H0_W_grad_sum)
+  // TODO: apply AVX2 + FMA + unrolling treatment here (same as the
+  //       optimised kernel functions) to fully exploit the eliminated
+  //       memory round-trip.
+  {
+    data_t * restrict delta = get_array_start(s->H0_B_grad);
+    data_t * restrict x     = get_array_start(s->IN);
+    data_t * restrict G     = get_matrix_start(ts->H0_W_grad_sum);
+    for (int i = 0; i < H0_SIZE; i++) {
+      data_t d = delta[i];
+      for (int j = 0; j < I_SIZE; j++) {
+        G[i * I_SIZE + j] += d * x[j];
+      }
+    }
+  }
 
   return 1;
 }
