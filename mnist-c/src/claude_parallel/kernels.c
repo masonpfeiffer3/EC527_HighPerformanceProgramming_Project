@@ -320,6 +320,16 @@ int kernel_vector_saxpy(array_ptr grad, data_t scale, array_ptr b) {
 // New batch kernels
 // =====================================================================
 
+/* hsum256 — horizontal sum of an __m256 register to a scalar. */
+static inline data_t hsum256(__m256 v) {
+    __m128 lo  = _mm256_castps256_ps128(v);
+    __m128 hi  = _mm256_extractf128_ps(v, 1);
+    __m128 sum = _mm_add_ps(lo, hi);
+    sum = _mm_hadd_ps(sum, sum);
+    sum = _mm_hadd_ps(sum, sum);
+    return _mm_cvtss_f32(sum);
+}
+
 /* kernel_gemm_forward — C = A x B^T  (dot-product / reduction form)
  *
  * A: (actual_S x k)   — batch of activations, samples as rows
@@ -328,14 +338,18 @@ int kernel_vector_saxpy(array_ptr grad, data_t scale, array_ptr b) {
  *
  * C[s][o] = sum_{j=0}^{k-1} A[s][j] * B[o][j]
  *
- * Inner loop is over k (the feature / weight dimension).
- * For the first layer: k=784, giving 98 full AVX passes per (s,o) pair.
- * AVX+FMA, no unrolling, no tiling.
+ * Tiling strategy (T_O_FWD = 4):
+ *   For each sample s, process T_O_FWD output neurons at once.
+ *   Load A[s][j..j+7] once and FMA it against T_O_FWD B rows per pass.
+ *   This gives T_O_FWD useful FMAs per A-vector load instead of 1,
+ *   improving the compute-to-load ratio by T_O_FWD x.
  */
+#define T_O_FWD 4
+
 int kernel_gemm_forward(matrix_ptr A, matrix_ptr B, matrix_ptr C, int actual_S) {
 
-    long int k = get_matrix_cols(A);   /* inner (feature) dimension */
-    long int m = get_matrix_rows(B);   /* number of output neurons  */
+    long int k = get_matrix_cols(A);
+    long int m = get_matrix_rows(B);
 
     if (get_matrix_cols(B) != k) return 0;
 
@@ -347,30 +361,62 @@ int kernel_gemm_forward(matrix_ptr A, matrix_ptr B, matrix_ptr C, int actual_S) 
         long int a_row = (long int)s * k;
         long int c_row = (long int)s * m;
 
-        for (long int o = 0; o < m; o++) {
+        long int o;
+
+        /* Tiled: process T_O_FWD output neurons per pass over k.
+         * One load of A[s][j..j+7] feeds T_O_FWD FMA ops. */
+        for (o = 0; o + T_O_FWD <= m; o += T_O_FWD) {
+            long int b0 = o       * k;
+            long int b1 = (o + 1) * k;
+            long int b2 = (o + 2) * k;
+            long int b3 = (o + 3) * k;
+
+            __m256 acc0 = _mm256_setzero_ps();
+            __m256 acc1 = _mm256_setzero_ps();
+            __m256 acc2 = _mm256_setzero_ps();
+            __m256 acc3 = _mm256_setzero_ps();
+
+            long int j;
+            for (j = 0; j < k - (AVX_STRIDE - 1); j += AVX_STRIDE) {
+                __m256 av = _mm256_loadu_ps(&a[a_row + j]);
+                acc0 = _mm256_fmadd_ps(av, _mm256_loadu_ps(&b[b0 + j]), acc0);
+                acc1 = _mm256_fmadd_ps(av, _mm256_loadu_ps(&b[b1 + j]), acc1);
+                acc2 = _mm256_fmadd_ps(av, _mm256_loadu_ps(&b[b2 + j]), acc2);
+                acc3 = _mm256_fmadd_ps(av, _mm256_loadu_ps(&b[b3 + j]), acc3);
+            }
+
+            data_t v0 = hsum256(acc0);
+            data_t v1 = hsum256(acc1);
+            data_t v2 = hsum256(acc2);
+            data_t v3 = hsum256(acc3);
+
+            for (; j < k; j++) {
+                data_t av = a[a_row + j];
+                v0 += av * b[b0 + j];
+                v1 += av * b[b1 + j];
+                v2 += av * b[b2 + j];
+                v3 += av * b[b3 + j];
+            }
+
+            c[c_row + o]     = v0;
+            c[c_row + o + 1] = v1;
+            c[c_row + o + 2] = v2;
+            c[c_row + o + 3] = v3;
+        }
+
+        /* Remainder: output neurons that do not fill a full tile */
+        for (; o < m; o++) {
             long int b_row = o * k;
-
             __m256 acc = _mm256_setzero_ps();
-
             long int j;
             for (j = 0; j < k - (AVX_STRIDE - 1); j += AVX_STRIDE) {
                 __m256 av = _mm256_loadu_ps(&a[a_row + j]);
                 __m256 bv = _mm256_loadu_ps(&b[b_row + j]);
                 acc = _mm256_fmadd_ps(av, bv, acc);
             }
-
-            /* Horizontal reduction: fold 8 lanes to 1 scalar */
-            __m128 lo  = _mm256_castps256_ps128(acc);
-            __m128 hi  = _mm256_extractf128_ps(acc, 1);
-            __m128 sum = _mm_add_ps(lo, hi);
-            sum = _mm_hadd_ps(sum, sum);
-            sum = _mm_hadd_ps(sum, sum);
-            data_t val = _mm_cvtss_f32(sum);
-
-            /* Scalar tail: 0-7 remaining elements */
+            data_t val = hsum256(acc);
             for (; j < k; j++)
                 val += a[a_row + j] * b[b_row + j];
-
             c[c_row + o] = val;
         }
     }
@@ -385,10 +431,13 @@ int kernel_gemm_forward(matrix_ptr A, matrix_ptr B, matrix_ptr C, int actual_S) 
  *
  * dW[o][j] += sum_{s=0}^{actual_S-1} delta[s][o] * act[s][j]
  *
- * Inner loop is over in_dim (j).  For the first layer: in_dim=784.
- * delta[s][o] is a scalar broadcast; dW and act are stride-1 in j.
- * AVX+FMA, no unrolling, no tiling.
+ * Tiling strategy (T_O_WG = 4):
+ *   Process T_O_WG output rows of dW at once.  For each sample s, load
+ *   act[s][j..j+7] once and FMA it into T_O_WG dW rows simultaneously.
+ *   This gives T_O_WG useful FMAs per act-vector load instead of 1.
  */
+#define T_O_WG 4
+
 int kernel_gemm_weight_grad(matrix_ptr delta, matrix_ptr act, matrix_ptr dW, int actual_S) {
 
     long int out_dim = get_matrix_cols(delta);
@@ -400,23 +449,64 @@ int kernel_gemm_weight_grad(matrix_ptr delta, matrix_ptr act, matrix_ptr dW, int
     data_t* restrict a  = get_matrix_start(act);
     data_t* restrict gw = get_matrix_start(dW);
 
-    for (long int o = 0; o < out_dim; o++) {
-        long int dw_row = o * in_dim;
+    long int o;
 
+    /* Tiled: process T_O_WG dW rows per pass over s and in_dim. */
+    for (o = 0; o + T_O_WG <= out_dim; o += T_O_WG) {
+        long int dw0 = o       * in_dim;
+        long int dw1 = (o + 1) * in_dim;
+        long int dw2 = (o + 2) * in_dim;
+        long int dw3 = (o + 3) * in_dim;
+
+        for (int s = 0; s < actual_S; s++) {
+            long int a_row = (long int)s * in_dim;
+            long int d_row = (long int)s * out_dim;
+
+            data_t d0 = d[d_row + o];
+            data_t d1 = d[d_row + o + 1];
+            data_t d2 = d[d_row + o + 2];
+            data_t d3 = d[d_row + o + 3];
+
+            __m256 dv0 = _mm256_set1_ps(d0);
+            __m256 dv1 = _mm256_set1_ps(d1);
+            __m256 dv2 = _mm256_set1_ps(d2);
+            __m256 dv3 = _mm256_set1_ps(d3);
+
+            long int j;
+            for (j = 0; j < in_dim - (AVX_STRIDE - 1); j += AVX_STRIDE) {
+                __m256 av = _mm256_loadu_ps(&a[a_row + j]);
+                _mm256_storeu_ps(&gw[dw0 + j],
+                    _mm256_fmadd_ps(dv0, av, _mm256_loadu_ps(&gw[dw0 + j])));
+                _mm256_storeu_ps(&gw[dw1 + j],
+                    _mm256_fmadd_ps(dv1, av, _mm256_loadu_ps(&gw[dw1 + j])));
+                _mm256_storeu_ps(&gw[dw2 + j],
+                    _mm256_fmadd_ps(dv2, av, _mm256_loadu_ps(&gw[dw2 + j])));
+                _mm256_storeu_ps(&gw[dw3 + j],
+                    _mm256_fmadd_ps(dv3, av, _mm256_loadu_ps(&gw[dw3 + j])));
+            }
+            for (; j < in_dim; j++) {
+                data_t av = a[a_row + j];
+                gw[dw0 + j] += d0 * av;
+                gw[dw1 + j] += d1 * av;
+                gw[dw2 + j] += d2 * av;
+                gw[dw3 + j] += d3 * av;
+            }
+        }
+    }
+
+    /* Remainder: output neurons that do not fill a full tile */
+    for (; o < out_dim; o++) {
+        long int dw_row = o * in_dim;
         for (int s = 0; s < actual_S; s++) {
             data_t d_so  = d[(long int)s * out_dim + o];
             __m256 d_vec = _mm256_set1_ps(d_so);
-
             long int a_row = (long int)s * in_dim;
-
             long int j;
             for (j = 0; j < in_dim - (AVX_STRIDE - 1); j += AVX_STRIDE) {
                 __m256 wv = _mm256_loadu_ps(&gw[dw_row + j]);
                 __m256 av = _mm256_loadu_ps(&a[a_row + j]);
                 _mm256_storeu_ps(&gw[dw_row + j], _mm256_fmadd_ps(d_vec, av, wv));
             }
-
-            /* Scalar tail */
             for (; j < in_dim; j++)
                 gw[dw_row + j] += d_so * a[a_row + j];
         }

@@ -320,21 +320,21 @@ void feedforward_batch(BatchScratch *s, int actual_S) {
   kernel_gemm_forward(s->IN_batch, H0_W, s->H0_mm_res, actual_S);
   kernel_bias_broadcast_add(s->H0_mm_res, H0_B, actual_S);
   kernel_matrix_copy_rows(s->H0_mm_res, s->H0_Z_batch, actual_S); /* save Z */
-  kernel_sigmoid_mat(s->H0_mm_res, actual_S);
+  sigmoid_mat(s->H0_mm_res, actual_S);
   kernel_matrix_copy_rows(s->H0_mm_res, s->H0_batch, actual_S);   /* save A */
 
   /* H0_batch → H1 */
   kernel_gemm_forward(s->H0_batch, H1_W, s->H1_mm_res, actual_S);
   kernel_bias_broadcast_add(s->H1_mm_res, H1_B, actual_S);
   kernel_matrix_copy_rows(s->H1_mm_res, s->H1_Z_batch, actual_S);
-  kernel_sigmoid_mat(s->H1_mm_res, actual_S);
+  sigmoid_mat(s->H1_mm_res, actual_S);
   kernel_matrix_copy_rows(s->H1_mm_res, s->H1_batch, actual_S);
 
   /* H1_batch → OUT */
   kernel_gemm_forward(s->H1_batch, L_W, s->L_mm_res, actual_S);
   kernel_bias_broadcast_add(s->L_mm_res, L_B, actual_S);
   kernel_matrix_copy_rows(s->L_mm_res, s->L_Z_batch, actual_S);
-  kernel_sigmoid_mat(s->L_mm_res, actual_S);
+  sigmoid_mat(s->L_mm_res, actual_S);
   kernel_matrix_copy_rows(s->L_mm_res, s->OUT_batch, actual_S);
 }
 
@@ -361,7 +361,7 @@ void backprop_batch(BatchScratch *s, ThreadGradSum *ts, int actual_S) {
 
   /* delAdelZ_L = sigmoid'(L_Z_batch) */
   kernel_matrix_copy_rows(s->L_Z_batch, s->BP_delAdelZ_L_batch, actual_S);
-  kernel_sigmoid_prime_mat(s->BP_delAdelZ_L_batch, actual_S);
+  sigmoid_prime_mat(s->BP_delAdelZ_L_batch, actual_S);
 
   /* delta_L = sigmoid'(L_Z) ⊙ (OUT - e_num) */
   kernel_hadamard_mat(s->BP_delAdelZ_L_batch, s->BP_delCdelA_L_batch,
@@ -387,7 +387,7 @@ void backprop_batch(BatchScratch *s, ThreadGradSum *ts, int actual_S) {
 
   /* delAdelZ_H1 = sigmoid'(H1_Z_batch) */
   kernel_matrix_copy_rows(s->H1_Z_batch, s->BP_delAdelZ_H1_batch, actual_S);
-  kernel_sigmoid_prime_mat(s->BP_delAdelZ_H1_batch, actual_S);
+  sigmoid_prime_mat(s->BP_delAdelZ_H1_batch, actual_S);
 
   /* delta_H1 = sigmoid'(H1_Z) ⊙ H1_A_grad */
   kernel_hadamard_mat(s->BP_delAdelZ_H1_batch, s->H1_A_grad_batch,
@@ -411,7 +411,7 @@ void backprop_batch(BatchScratch *s, ThreadGradSum *ts, int actual_S) {
 
   /* delAdelZ_H0 = sigmoid'(H0_Z_batch) */
   kernel_matrix_copy_rows(s->H0_Z_batch, s->BP_delAdelZ_H0_batch, actual_S);
-  kernel_sigmoid_prime_mat(s->BP_delAdelZ_H0_batch, actual_S);
+  sigmoid_prime_mat(s->BP_delAdelZ_H0_batch, actual_S);
 
   /* delta_H0 = sigmoid'(H0_Z) ⊙ H0_A_grad */
   kernel_hadamard_mat(s->BP_delAdelZ_H0_batch, s->H0_A_grad_batch,

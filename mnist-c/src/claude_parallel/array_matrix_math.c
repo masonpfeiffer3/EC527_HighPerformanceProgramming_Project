@@ -231,3 +231,17 @@ void sigmoid_prime_arr(array_ptr v) {
 
 data_t sigmoid(data_t z)       { return 1 / (1 + expf(-z)); }
 data_t sigmoid_prime(data_t z) { return sigmoid(z) * (1 - sigmoid(z)); }
+
+void sigmoid_mat(matrix_ptr m, int actual_S) {
+  long int cols  = get_matrix_cols(m);
+  long int total = (long int)actual_S * cols;
+  data_t  *v     = get_matrix_start(m);
+  for (long int i = 0; i < total; i++) v[i] = sigmoid(v[i]);
+}
+
+void sigmoid_prime_mat(matrix_ptr m, int actual_S) {
+  long int cols  = get_matrix_cols(m);
+  long int total = (long int)actual_S * cols;
+  data_t  *v     = get_matrix_start(m);
+  for (long int i = 0; i < total; i++) v[i] = sigmoid_prime(v[i]);
+}

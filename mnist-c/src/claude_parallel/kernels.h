@@ -36,12 +36,6 @@ int kernel_gemm_forward(matrix_ptr A, matrix_ptr B, matrix_ptr C, int actual_S);
 // Used for weight gradient accumulation.
 int kernel_gemm_weight_grad(matrix_ptr delta, matrix_ptr act, matrix_ptr dW, int actual_S);
 
-// Element-wise sigmoid applied to the first actual_S rows of m (in-place).
-void kernel_sigmoid_mat(matrix_ptr m, int actual_S);
-
-// Element-wise sigmoid' applied to the first actual_S rows of m (in-place).
-void kernel_sigmoid_prime_mat(matrix_ptr m, int actual_S);
-
 // Element-wise multiply: C[s][j] = A[s][j] * B[s][j]  for s in 0..actual_S.
 // A, B, C must have the same shape.
 int kernel_hadamard_mat(matrix_ptr A, matrix_ptr B, matrix_ptr C, int actual_S);

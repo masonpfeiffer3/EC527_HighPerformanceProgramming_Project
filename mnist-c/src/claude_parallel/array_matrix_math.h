@@ -32,4 +32,8 @@ void sigmoid_arr(array_ptr v);
 data_t sigmoid_prime(data_t z);
 void sigmoid_prime_arr(array_ptr v);
 
+// Batch sigmoid: apply sigmoid / sigmoid' in-place to the first actual_S rows of m.
+void sigmoid_mat(matrix_ptr m, int actual_S);
+void sigmoid_prime_mat(matrix_ptr m, int actual_S);
+
 #endif
