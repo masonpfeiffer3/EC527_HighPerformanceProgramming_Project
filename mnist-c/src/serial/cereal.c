@@ -228,8 +228,8 @@ void train_MNIST(dataset_ptr train_data) {
         // Accumulate this sample's gradients into THIS THREAD's sum.
         // Safe: no other thread touches ts.
         kernel_matrix_matrix_add(ts->H0_W_grad_sum, s->H0_W_grad, ts->H0_W_grad_sum);
-        kernel_matrix_vector_mult(ts->H1_W_grad_sum, s->H1_W_grad, ts->H1_W_grad_sum);
-        kernel_matrix_vector_mult(ts->L_W_grad_sum,  s->L_W_grad,  ts->L_W_grad_sum);
+        kernel_matrix_matrix_add(ts->H1_W_grad_sum, s->H1_W_grad, ts->H1_W_grad_sum);
+        kernel_matrix_matrix_add(ts->L_W_grad_sum,  s->L_W_grad,  ts->L_W_grad_sum);
         vector_vector_add(ts->H0_B_grad_sum, s->H0_B_grad, ts->H0_B_grad_sum);
         vector_vector_add(ts->H1_B_grad_sum, s->H1_B_grad, ts->H1_B_grad_sum);
         vector_vector_add(ts->L_B_grad_sum,  s->L_B_grad,  ts->L_B_grad_sum);
@@ -239,8 +239,8 @@ void train_MNIST(dataset_ptr train_data) {
       // ===== SERIAL: combine thread-local sums into global sum =====
       for (int t = 0; t < NUM_THREADS; t++) {
         kernel_matrix_matrix_add(H0_W_grad_sum, thread_sums[t].H0_W_grad_sum, H0_W_grad_sum);
-        kernel_matrix_vector_mult(H1_W_grad_sum, thread_sums[t].H1_W_grad_sum, H1_W_grad_sum);
-        kernel_matrix_vector_mult(L_W_grad_sum,  thread_sums[t].L_W_grad_sum,  L_W_grad_sum);
+        kernel_matrix_matrix_add(H1_W_grad_sum, thread_sums[t].H1_W_grad_sum, H1_W_grad_sum);
+        kernel_matrix_matrix_add(L_W_grad_sum,  thread_sums[t].L_W_grad_sum,  L_W_grad_sum);
         vector_vector_add(H0_B_grad_sum, thread_sums[t].H0_B_grad_sum, H0_B_grad_sum);
         vector_vector_add(H1_B_grad_sum, thread_sums[t].H1_B_grad_sum, H1_B_grad_sum);
         vector_vector_add(L_B_grad_sum,  thread_sums[t].L_B_grad_sum,  L_B_grad_sum);
