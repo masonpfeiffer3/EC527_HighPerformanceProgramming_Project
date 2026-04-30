@@ -3,6 +3,7 @@
 #include <time.h>
 #include <math.h>
 #include <omp.h>
+#include <immintrin.h>          /* AVX, AVX2, FMA, SSE3 intrinsics      */
 
 #include "../params.h"
 #include "array_matrix_funcs.h"
@@ -31,8 +32,17 @@ matrix_ptr L_W;  array_ptr L_B;
 
 // =====================================================================
 // PER-THREAD scratch: everything that gets written during a sample's
-// forward+backward pass. One copy per thread (NOT per sample) -- a
-// thread reuses its scratch sequentially across the samples it owns.
+// forward+backward pass. One copy per thread (NOT per sample).
+//
+// Removed from earlier versions:
+//   H0_W_grad, H1_W_grad, L_W_grad  -- Fusion 5: outer products now
+//     accumulate directly into ThreadGradSum; these were allocated but
+//     never written or read after the fusion
+//   BP_y                             -- inlined as a single scalar
+//     subtraction on BP_delCdelA_L; no need for a whole array
+//   BP_delCdelA_H1                   -- was always an immediate copy of
+//     H1_A_grad consumed exactly once; copy served no purpose
+//   BP_delCdelA_H0                   -- same pattern as BP_delCdelA_H1
 // =====================================================================
 struct SampleScratch {
   // Activations + Z buffers
@@ -41,10 +51,11 @@ struct SampleScratch {
   array_ptr H1, H1_Z;
   array_ptr OUT, L_Z;
 
-  // Per-sample gradients (overwritten every sample)
-  matrix_ptr H0_W_grad, H1_W_grad, L_W_grad;
-  array_ptr  H0_B_grad, H1_B_grad, L_B_grad;
-  array_ptr  H0_A_grad, H1_A_grad;
+  // Per-sample bias deltas (overwritten every sample)
+  array_ptr H0_B_grad, H1_B_grad, L_B_grad;
+
+  // Backprop error signals: output of W^T * delta for each layer
+  array_ptr H0_A_grad, H1_A_grad;
 
   // Feedforward scratch
   array_ptr H0_mvm_res, H0_z_temp;
@@ -52,11 +63,12 @@ struct SampleScratch {
   array_ptr L_mvm_res,  L_z_temp;
 
   // Backprop scratch
-  array_ptr  BP_delCdelA_L,  BP_y, BP_delAdelZ_L;
-  matrix_ptr BP_W_T_L;
-  array_ptr  BP_delCdelA_H1, BP_delAdelZ_H1;
-  matrix_ptr BP_W_T_H1;
-  array_ptr  BP_delCdelA_H0, BP_delAdelZ_H0;
+  array_ptr  BP_delCdelA_L;   // OUT - e_num  (cost gradient before hadamard)
+  array_ptr  BP_delAdelZ_L;   // sigmoid'(L_Z)
+  matrix_ptr BP_W_T_L;        // L_W^T  (for propagating error to H1)
+  array_ptr  BP_delAdelZ_H1;  // sigmoid'(H1_Z)
+  matrix_ptr BP_W_T_H1;       // H1_W^T (for propagating error to H0)
+  array_ptr  BP_delAdelZ_H0;  // sigmoid'(H0_Z)
 };
 
 // =====================================================================
@@ -65,11 +77,10 @@ struct SampleScratch {
 // these into the global sum used for the weight update.
 // =====================================================================
 
-
 static SampleScratch  *scratch;       // size = NUM_THREADS
 static ThreadGradSum  *thread_sums;   // size = NUM_THREADS
 
-// Forward declarations -- updated signatures take a scratch pointer
+// Forward declarations
 void feedforward(SampleScratch *s);
 int  backprop(SampleScratch *s, ThreadGradSum *ts, int num);
 static void alloc_scratch(SampleScratch *s);
@@ -84,17 +95,20 @@ void serial_MNIST(dataset_ptr train_data, dataset_ptr test_data) {
   clock_gettime(CLOCK_MONOTONIC, &t0);
   init_MNIST();
   clock_gettime(CLOCK_MONOTONIC, &t1);
-  printf("init_MNIST:  %.4f s\n", (t1.tv_sec - t0.tv_sec) + (t1.tv_nsec - t0.tv_nsec) / 1e9);
+  printf("init_MNIST:  %.4f s\n",
+         (t1.tv_sec - t0.tv_sec) + (t1.tv_nsec - t0.tv_nsec) / 1e9);
 
   clock_gettime(CLOCK_MONOTONIC, &t0);
   train_MNIST(train_data);
   clock_gettime(CLOCK_MONOTONIC, &t1);
-  printf("train_MNIST: %.4f s\n", (t1.tv_sec - t0.tv_sec) + (t1.tv_nsec - t0.tv_nsec) / 1e9);
+  printf("train_MNIST: %.4f s\n",
+         (t1.tv_sec - t0.tv_sec) + (t1.tv_nsec - t0.tv_nsec) / 1e9);
 
   clock_gettime(CLOCK_MONOTONIC, &t0);
   test_MNIST(test_data);
   clock_gettime(CLOCK_MONOTONIC, &t1);
-  printf("test_MNIST:  %.4f s\n", (t1.tv_sec - t0.tv_sec) + (t1.tv_nsec - t0.tv_nsec) / 1e9);
+  printf("test_MNIST:  %.4f s\n",
+         (t1.tv_sec - t0.tv_sec) + (t1.tv_nsec - t0.tv_nsec) / 1e9);
 }
 
 void init_MNIST() {
@@ -133,9 +147,9 @@ static void alloc_scratch(SampleScratch *s) {
   s->OUT  = new_array(L_SIZE);
   s->L_Z  = new_array(L_SIZE);
 
-  s->H0_W_grad = new_matrix(H0_SIZE, I_SIZE);
-  s->H1_W_grad = new_matrix(H1_SIZE, H0_SIZE);
-  s->L_W_grad  = new_matrix(L_SIZE, H1_SIZE);
+  // H0_W_grad / H1_W_grad / L_W_grad intentionally absent.
+  // Fusion 5: outer products now accumulate directly into ThreadGradSum
+  // inside backprop(); per-sample weight-gradient matrices no longer exist.
   s->H0_B_grad = new_array(H0_SIZE);
   s->H1_B_grad = new_array(H1_SIZE);
   s->L_B_grad  = new_array(L_SIZE);
@@ -150,13 +164,13 @@ static void alloc_scratch(SampleScratch *s) {
   s->L_z_temp   = new_array(L_SIZE);
 
   s->BP_delCdelA_L  = new_array(L_SIZE);
-  s->BP_y           = new_array(L_SIZE);
   s->BP_delAdelZ_L  = new_array(L_SIZE);
   s->BP_W_T_L       = new_matrix(H1_SIZE, L_SIZE);
-  s->BP_delCdelA_H1 = new_array(H1_SIZE);
+  // BP_y absent: replaced by vector_copy(OUT, BP_delCdelA_L) + one scalar subtraction
+  // BP_delCdelA_H1 absent: was an unnecessary copy of H1_A_grad
   s->BP_delAdelZ_H1 = new_array(H1_SIZE);
   s->BP_W_T_H1      = new_matrix(H0_SIZE, H1_SIZE);
-  s->BP_delCdelA_H0 = new_array(H0_SIZE);
+  // BP_delCdelA_H0 absent: was an unnecessary copy of H0_A_grad
   s->BP_delAdelZ_H0 = new_array(H0_SIZE);
 }
 
@@ -183,7 +197,7 @@ static void zero_thread_sums(ThreadGradSum *t) {
 
 void train_MNIST(dataset_ptr train_data) {
 
-  // Global (final) gradient sum -- the destination after combining threads
+  // Global (final) gradient sum -- destination after combining threads
   matrix_ptr H0_W_grad_sum = new_matrix(H0_SIZE, I_SIZE);
   matrix_ptr H1_W_grad_sum = new_matrix(H1_SIZE, H0_SIZE);
   matrix_ptr L_W_grad_sum  = new_matrix(L_SIZE, H1_SIZE);
@@ -207,12 +221,10 @@ void train_MNIST(dataset_ptr train_data) {
 
     for (int i = 0; i < TRAIN_SIZE; i += BATCH_SIZE) {
 
-      // ===== PARALLEL REGION: per-sample work =====
-      // FUSION 5: backprop(s, ts, num) now accumulates ALL gradients
-      // (weight outer products and bias deltas) directly into ts.
-      // The six kernel_matrix_matrix_add / kernel_vector_vector_add
-      // calls that previously appeared after backprop() are gone;
-      // no gradient data is staged through a per-sample buffer anymore.
+      // ===== PARALLEL REGION =====
+      // backprop(s, ts, num) accumulates ALL gradients (weight outer
+      // products and bias deltas) directly into ts. No per-sample
+      // gradient buffers exist; no follow-up add calls are needed.
       #pragma omp parallel for schedule(static)
       for (int j = i; j < i + BATCH_SIZE; j++) {
         int tid = omp_get_thread_num();
@@ -223,32 +235,37 @@ void train_MNIST(dataset_ptr train_data) {
         int num = train_data->nums[indices[j]];
 
         feedforward(s);
-        backprop(s, ts, num);   // accumulates directly into ts -- no follow-up adds needed
+        backprop(s, ts, num);   // accumulates directly into ts
       }
       // ===== END PARALLEL REGION (implicit barrier) =====
 
       // ===== SERIAL: combine thread-local sums into global sum =====
       for (int t = 0; t < NUM_THREADS; t++) {
-        kernel_matrix_matrix_add(H0_W_grad_sum, thread_sums[t].H0_W_grad_sum, H0_W_grad_sum);
-        kernel_matrix_matrix_add(H1_W_grad_sum, thread_sums[t].H1_W_grad_sum, H1_W_grad_sum);
-        kernel_matrix_matrix_add(L_W_grad_sum,  thread_sums[t].L_W_grad_sum,  L_W_grad_sum);
-        kernel_vector_vector_add(H0_B_grad_sum, thread_sums[t].H0_B_grad_sum, H0_B_grad_sum);
-        kernel_vector_vector_add(H1_B_grad_sum, thread_sums[t].H1_B_grad_sum, H1_B_grad_sum);
-        kernel_vector_vector_add(L_B_grad_sum,  thread_sums[t].L_B_grad_sum,  L_B_grad_sum);
+        kernel_matrix_matrix_add(H0_W_grad_sum,
+                                 thread_sums[t].H0_W_grad_sum, H0_W_grad_sum);
+        kernel_matrix_matrix_add(H1_W_grad_sum,
+                                 thread_sums[t].H1_W_grad_sum, H1_W_grad_sum);
+        kernel_matrix_matrix_add(L_W_grad_sum,
+                                 thread_sums[t].L_W_grad_sum,  L_W_grad_sum);
+        kernel_vector_vector_add(H0_B_grad_sum,
+                                 thread_sums[t].H0_B_grad_sum, H0_B_grad_sum);
+        kernel_vector_vector_add(H1_B_grad_sum,
+                                 thread_sums[t].H1_B_grad_sum, H1_B_grad_sum);
+        kernel_vector_vector_add(L_B_grad_sum,
+                                 thread_sums[t].L_B_grad_sum,  L_B_grad_sum);
         zero_thread_sums(&thread_sums[t]);  // reset for next batch
       }
 
-      // ===== SERIAL: scale, negate, apply to weights/biases =====
-      data_t reciprocalBatchSize = 1.0 / BATCH_SIZE;
-      data_t scale = -LEARN_RATE*reciprocalBatchSize;
+      // ===== SERIAL: scale and apply to weights/biases =====
+      data_t scale = -(data_t)LEARN_RATE / BATCH_SIZE;
 
       kernel_matrix_saxpy(H0_W_grad_sum, scale, H0_W);
       kernel_matrix_saxpy(H1_W_grad_sum, scale, H1_W);
-      kernel_matrix_saxpy(L_W_grad_sum, scale, L_W);
-      
+      kernel_matrix_saxpy(L_W_grad_sum,  scale, L_W);
+
       kernel_vector_saxpy(H0_B_grad_sum, scale, H0_B);
       kernel_vector_saxpy(H1_B_grad_sum, scale, H1_B);
-      kernel_vector_saxpy(L_B_grad_sum, scale, L_B);
+      kernel_vector_saxpy(L_B_grad_sum,  scale, L_B);
 
       zero_matrix(H0_W_grad_sum);
       zero_matrix(H1_W_grad_sum);
@@ -279,7 +296,8 @@ void test_MNIST(dataset_ptr test_data) {
   }
 
   data_t accuracy = (data_t)correct / TEST_SIZE;
-  printf("Test accuracy: %d / %d (%.2f%%)\n", correct, TEST_SIZE, accuracy * 100);
+  printf("Test accuracy: %d / %d (%.2f%%)\n",
+         correct, TEST_SIZE, accuracy * 100);
 }
 
 // =====================================================================
@@ -290,22 +308,21 @@ int backprop(SampleScratch *s, ThreadGradSum *ts, int num) {
   // OUTPUT LAYER
   // ------------------------------------------------------------------
 
-  // delCdelA_L = OUT - y    (quadratic cost derivative)
-  zero_array(s->BP_y);
-  s->BP_y->data[num] = -1.0;
-  if (!kernel_vector_vector_add(s->OUT, s->BP_y, s->BP_delCdelA_L)) return 0;
+  // delCdelA_L = OUT - e_num
+  // BP_y eliminated: previously required zero_array + set BP_y[num]=-1
+  // + a full vector add. Now: copy OUT, subtract 1 at one position.
+  if (!vector_copy(s->OUT, s->BP_delCdelA_L)) return 0;
+  s->BP_delCdelA_L->data[num] -= 1.0;
 
   // delAdelZ_L = sigmoid'(L_Z)
   if (!vector_copy(s->L_Z, s->BP_delAdelZ_L)) return 0;
   sigmoid_prime_arr(s->BP_delAdelZ_L);
 
-  // delta_L = sigmoid'(L_Z) ⊙ (OUT - y)   --> L_B_grad
+  // delta_L = sigmoid'(L_Z) ⊙ (OUT - e_num) --> L_B_grad
   if (!vector_vector_elementwise_mult(s->BP_delAdelZ_L, s->BP_delCdelA_L,
                                       s->L_B_grad)) return 0;
 
-  // FUSION 5 -- accumulate L bias gradient directly into thread sum.
-  // Replaces: kernel_vector_vector_add(ts->L_B_grad_sum, s->L_B_grad,
-  //                                    ts->L_B_grad_sum)  in parallel region.
+  // Accumulate L bias gradient directly into thread sum (Fusion 5)
   {
     data_t * restrict bg  = get_array_start(s->L_B_grad);
     data_t * restrict sum = get_array_start(ts->L_B_grad_sum);
@@ -314,10 +331,7 @@ int backprop(SampleScratch *s, ThreadGradSum *ts, int num) {
     }
   }
 
-  // FUSION 5 -- rank-1 update: L_W_grad_sum[i][j] += delta_L[i] * H1[j]
-  // Replaces: kernel_vector_vector_mult(s->L_B_grad, s->H1, s->L_W_grad)
-  //     then: kernel_matrix_matrix_add(ts->L_W_grad_sum, s->L_W_grad,
-  //                                    ts->L_W_grad_sum)
+  // Rank-1 update: L_W_grad_sum[i][j] += delta_L[i] * H1[j] (Fusion 5)
   {
     data_t * restrict delta = get_array_start(s->L_B_grad);
     data_t * restrict x     = get_array_start(s->H1);
@@ -331,24 +345,23 @@ int backprop(SampleScratch *s, ThreadGradSum *ts, int num) {
   }
 
   // Propagate error to H1: H1_A_grad = L_W^T * delta_L
-  if (!kernel_matrix_transpose(L_W, s->BP_W_T_L)) return 0;       // L_W is SHARED (read-only)
+  if (!kernel_matrix_transpose(L_W, s->BP_W_T_L)) return 0; // L_W is SHARED
   if (!kernel_matrix_vector_mult(s->BP_W_T_L, s->L_B_grad, s->H1_A_grad)) return 0;
 
   // ------------------------------------------------------------------
   // HIDDEN LAYER 1
   // ------------------------------------------------------------------
 
-  if (!vector_copy(s->H1_A_grad, s->BP_delCdelA_H1)) return 0;
-
   // delAdelZ_H1 = sigmoid'(H1_Z)
   if (!vector_copy(s->H1_Z, s->BP_delAdelZ_H1)) return 0;
   sigmoid_prime_arr(s->BP_delAdelZ_H1);
 
-  // delta_H1 = sigmoid'(H1_Z) ⊙ delCdelA_H1   --> H1_B_grad
-  if (!vector_vector_elementwise_mult(s->BP_delAdelZ_H1, s->BP_delCdelA_H1,
+  // delta_H1 = sigmoid'(H1_Z) ⊙ H1_A_grad --> H1_B_grad
+  // BP_delCdelA_H1 eliminated: was always a copy of H1_A_grad consumed once
+  if (!vector_vector_elementwise_mult(s->BP_delAdelZ_H1, s->H1_A_grad,
                                       s->H1_B_grad)) return 0;
 
-  // FUSION 5 -- accumulate H1 bias gradient directly into thread sum.
+  // Accumulate H1 bias gradient directly into thread sum (Fusion 5)
   {
     data_t * restrict bg  = get_array_start(s->H1_B_grad);
     data_t * restrict sum = get_array_start(ts->H1_B_grad_sum);
@@ -357,10 +370,7 @@ int backprop(SampleScratch *s, ThreadGradSum *ts, int num) {
     }
   }
 
-  // FUSION 5 -- rank-1 update: H1_W_grad_sum[i][j] += delta_H1[i] * H0[j]
-  // Replaces: kernel_vector_vector_mult(s->H1_B_grad, s->H0, s->H1_W_grad)
-  //     then: kernel_matrix_matrix_add(ts->H1_W_grad_sum, s->H1_W_grad,
-  //                                    ts->H1_W_grad_sum)
+  // Rank-1 update: H1_W_grad_sum[i][j] += delta_H1[i] * H0[j] (Fusion 5)
   {
     data_t * restrict delta = get_array_start(s->H1_B_grad);
     data_t * restrict x     = get_array_start(s->H0);
@@ -374,24 +384,23 @@ int backprop(SampleScratch *s, ThreadGradSum *ts, int num) {
   }
 
   // Propagate error to H0: H0_A_grad = H1_W^T * delta_H1
-  if (!kernel_matrix_transpose(H1_W, s->BP_W_T_H1)) return 0;     // H1_W is SHARED (read-only)
+  if (!kernel_matrix_transpose(H1_W, s->BP_W_T_H1)) return 0; // H1_W is SHARED
   if (!kernel_matrix_vector_mult(s->BP_W_T_H1, s->H1_B_grad, s->H0_A_grad)) return 0;
 
   // ------------------------------------------------------------------
   // HIDDEN LAYER 0
   // ------------------------------------------------------------------
 
-  if (!vector_copy(s->H0_A_grad, s->BP_delCdelA_H0)) return 0;
-
   // delAdelZ_H0 = sigmoid'(H0_Z)
   if (!vector_copy(s->H0_Z, s->BP_delAdelZ_H0)) return 0;
   sigmoid_prime_arr(s->BP_delAdelZ_H0);
 
-  // delta_H0 = sigmoid'(H0_Z) ⊙ delCdelA_H0   --> H0_B_grad
-  if (!vector_vector_elementwise_mult(s->BP_delAdelZ_H0, s->BP_delCdelA_H0,
+  // delta_H0 = sigmoid'(H0_Z) ⊙ H0_A_grad --> H0_B_grad
+  // BP_delCdelA_H0 eliminated: was always a copy of H0_A_grad consumed once
+  if (!vector_vector_elementwise_mult(s->BP_delAdelZ_H0, s->H0_A_grad,
                                       s->H0_B_grad)) return 0;
 
-  // FUSION 5 -- accumulate H0 bias gradient directly into thread sum.
+  // Accumulate H0 bias gradient directly into thread sum (Fusion 5)
   {
     data_t * restrict bg  = get_array_start(s->H0_B_grad);
     data_t * restrict sum = get_array_start(ts->H0_B_grad_sum);
@@ -400,14 +409,10 @@ int backprop(SampleScratch *s, ThreadGradSum *ts, int num) {
     }
   }
 
-  // FUSION 5 -- rank-1 update: H0_W_grad_sum[i][j] += delta_H0[i] * IN[j]
-  // This is the 100×784 dominant inner loop. Replaces:
-  //   kernel_vector_vector_mult(s->H0_B_grad, s->IN, s->H0_W_grad)
-  //   kernel_matrix_matrix_add(ts->H0_W_grad_sum, s->H0_W_grad,
-  //                             ts->H0_W_grad_sum)
-  // TODO: apply AVX2 + FMA + unrolling treatment here (same as the
-  //       optimised kernel functions) to fully exploit the eliminated
-  //       memory round-trip.
+  // Rank-1 update: H0_W_grad_sum[i][j] += delta_H0[i] * IN[j] (Fusion 5)
+  // This is the dominant 100x784 hot loop.
+  // NOTE: I_SIZE = 784 = 98 x 8 -- inner loop divides exactly by AVX2 width.
+  // TODO: manual AVX2 + FMA vectorisation of this inner loop (see analysis).
   {
     data_t * restrict delta = get_array_start(s->H0_B_grad);
     data_t * restrict x     = get_array_start(s->IN);
@@ -422,6 +427,8 @@ int backprop(SampleScratch *s, ThreadGradSum *ts, int num) {
 
   return 1;
 }
+
+// =====================================================================
 
 void feedforward(SampleScratch *s) {
   // IN -> H0    (H0_W and H0_B are SHARED, read-only here)
@@ -446,7 +453,7 @@ void feedforward(SampleScratch *s) {
   vector_copy(s->L_z_temp, s->OUT);
 }
 
-
+// =====================================================================
 
 array_ptr numToVec(int num) {
   array_ptr result = new_array(L_SIZE);
