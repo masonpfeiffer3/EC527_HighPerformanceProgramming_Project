@@ -15,4 +15,7 @@ int kernel_vector_scalar_mult(array_ptr v1, data_t scalar, array_ptr v_out);
 
 void kernel_sigmoid_arr(array_ptr v);
 
+int kernel_matrix_saxpy(matrix_ptr grad, data_t scale, matrix_ptr W);
+int kernel_vector_saxpy(array_ptr grad, data_t scale, array_ptr b);
+
 #endif

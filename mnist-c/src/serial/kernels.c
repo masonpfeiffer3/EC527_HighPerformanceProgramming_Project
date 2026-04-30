@@ -274,6 +274,128 @@ int kernel_matrix_matrix_add(matrix_ptr m1, matrix_ptr m2, matrix_ptr m_out) {
 }
 
 
+
+/* kernel_matrix_saxpy: W[i] += scale * grad[i]  for all elements
+ * This is the SGD weight update in one pass.
+ * Replaces 3× scalar_mult + 1× matrix_add entirely.             */
+int kernel_matrix_saxpy(matrix_ptr grad, data_t scale, matrix_ptr W) {
+
+    long int rows  = get_matrix_rows(W);
+    long int cols  = get_matrix_cols(W);
+    long int grows = get_matrix_rows(grad);
+    long int gcols = get_matrix_cols(grad);
+
+    if (rows != grows || cols != gcols) return 0;
+
+    long int n = rows * cols;   /* treat as flat array — no 2D indexing needed */
+
+    data_t* restrict w_data    = get_matrix_start(W);
+    data_t* restrict grad_data = get_matrix_start(grad);
+
+    /* Broadcast scale to all 8 AVX lanes                          */
+    __m256 scale_vec = _mm256_set1_ps(scale);
+
+    long int i;
+
+    /* 6x unrolled AVX FMA: W[i] += scale * grad[i]
+     * _mm256_fmadd_ps(scale_vec, grad, W) = scale*grad + W
+     * For n=78400 (100×784): 78400/48 = 1633 iters remainder 16  */
+    for (i = 0; i < n - 47; i += 48) {
+        __m256 w0 = _mm256_loadu_ps(&w_data[i]);
+        __m256 g0 = _mm256_loadu_ps(&grad_data[i]);
+        _mm256_storeu_ps(&w_data[i], _mm256_fmadd_ps(scale_vec, g0, w0));
+
+        __m256 w1 = _mm256_loadu_ps(&w_data[i + 8]);
+        __m256 g1 = _mm256_loadu_ps(&grad_data[i + 8]);
+        _mm256_storeu_ps(&w_data[i + 8], _mm256_fmadd_ps(scale_vec, g1, w1));
+
+        __m256 w2 = _mm256_loadu_ps(&w_data[i + 16]);
+        __m256 g2 = _mm256_loadu_ps(&grad_data[i + 16]);
+        _mm256_storeu_ps(&w_data[i + 16], _mm256_fmadd_ps(scale_vec, g2, w2));
+
+        __m256 w3 = _mm256_loadu_ps(&w_data[i + 24]);
+        __m256 g3 = _mm256_loadu_ps(&grad_data[i + 24]);
+        _mm256_storeu_ps(&w_data[i + 24], _mm256_fmadd_ps(scale_vec, g3, w3));
+
+        __m256 w4 = _mm256_loadu_ps(&w_data[i + 32]);
+        __m256 g4 = _mm256_loadu_ps(&grad_data[i + 32]);
+        _mm256_storeu_ps(&w_data[i + 32], _mm256_fmadd_ps(scale_vec, g4, w4));
+
+        __m256 w5 = _mm256_loadu_ps(&w_data[i + 40]);
+        __m256 g5 = _mm256_loadu_ps(&grad_data[i + 40]);
+        _mm256_storeu_ps(&w_data[i + 40], _mm256_fmadd_ps(scale_vec, g5, w5));
+    }
+    for (; i < n - 7; i += 8) {
+        __m256 w = _mm256_loadu_ps(&w_data[i]);
+        __m256 g = _mm256_loadu_ps(&grad_data[i]);
+        _mm256_storeu_ps(&w_data[i], _mm256_fmadd_ps(scale_vec, g, w));
+    }
+    for (; i < n; i++) {
+        w_data[i] += scale * grad_data[i];
+    }
+    return 1;
+}
+
+int kernel_vector_saxpy(array_ptr grad, data_t scale, array_ptr b) {
+    
+    long int n  = b->len;
+    long int gn = grad->len;
+
+    /* Ensure vectors are the same length */
+    if (n != gn) return 0;
+
+    data_t* restrict b_data    = b->data;
+    data_t* restrict grad_data = grad->data;
+
+    /* Broadcast scale to all 8 AVX lanes (256 bits / 32-bit float = 8 lanes) */
+    __m256 scale_vec = _mm256_set1_ps(scale);
+
+    long int i;
+
+    /* 6x unrolled AVX FMA: b[i] += scale * grad[i] 
+     * Processing 48 elements per iteration (6 registers * 8 floats) */
+    for (i = 0; i < n - 47; i += 48) {
+        __m256 b0 = _mm256_loadu_ps(&b_data[i]);
+        __m256 g0 = _mm256_loadu_ps(&grad_data[i]);
+        _mm256_storeu_ps(&b_data[i], _mm256_fmadd_ps(scale_vec, g0, b0));
+
+        __m256 b1 = _mm256_loadu_ps(&b_data[i + 8]);
+        __m256 g1 = _mm256_loadu_ps(&grad_data[i + 8]);
+        _mm256_storeu_ps(&b_data[i + 8], _mm256_fmadd_ps(scale_vec, g1, b1));
+
+        __m256 b2 = _mm256_loadu_ps(&b_data[i + 16]);
+        __m256 g2 = _mm256_loadu_ps(&grad_data[i + 16]);
+        _mm256_storeu_ps(&b_data[i + 16], _mm256_fmadd_ps(scale_vec, g2, b2));
+
+        __m256 b3 = _mm256_loadu_ps(&b_data[i + 24]);
+        __m256 g3 = _mm256_loadu_ps(&grad_data[i + 24]);
+        _mm256_storeu_ps(&b_data[i + 24], _mm256_fmadd_ps(scale_vec, g3, b3));
+
+        __m256 b4 = _mm256_loadu_ps(&b_data[i + 32]);
+        __m256 g4 = _mm256_loadu_ps(&grad_data[i + 32]);
+        _mm256_storeu_ps(&b_data[i + 32], _mm256_fmadd_ps(scale_vec, g4, b4));
+
+        __m256 b5 = _mm256_loadu_ps(&b_data[i + 40]);
+        __m256 g5 = _mm256_loadu_ps(&grad_data[i + 40]);
+        _mm256_storeu_ps(&b_data[i + 40], _mm256_fmadd_ps(scale_vec, g5, b5));
+    }
+
+    /* Cleanup loop: 8 elements at a time */
+    for (; i < n - 7; i += 8) {
+        __m256 b_vec = _mm256_loadu_ps(&b_data[i]);
+        __m256 g_vec = _mm256_loadu_ps(&grad_data[i]);
+        _mm256_storeu_ps(&b_data[i], _mm256_fmadd_ps(scale_vec, g_vec, b_vec));
+    }
+
+    /* Final cleanup: scalar fallback for the remaining < 8 elements */
+    for (; i < n; i++) {
+        b_data[i] += scale * grad_data[i];
+    }
+
+    return 1;
+}
+
+
 int kernel_vector_vector_add(array_ptr v1, array_ptr v2, array_ptr v_out) {
 
     int v1len   = get_array_length(v1);
