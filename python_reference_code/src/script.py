@@ -6,4 +6,4 @@ import network
 
 net = network.Network([784, 100, 16, 10])
 
-net.SGD(training_data, 10, 10, 3, test_data=test_data)
+net.SGD(training_data, 10, 100, 3, test_data=test_data)
