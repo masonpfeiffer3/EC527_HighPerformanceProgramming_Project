@@ -245,11 +245,11 @@ void train_MNIST(dataset_ptr train_data) {
                                  thread_sums[t].H1_W_grad_sum, H1_W_grad_sum);
         kernel_matrix_matrix_add(L_W_grad_sum,
                                  thread_sums[t].L_W_grad_sum,  L_W_grad_sum);
-        kernel_vector_vector_add(H0_B_grad_sum,
+        vector_vector_add(H0_B_grad_sum,
                                  thread_sums[t].H0_B_grad_sum, H0_B_grad_sum);
-        kernel_vector_vector_add(H1_B_grad_sum,
+        vector_vector_add(H1_B_grad_sum,
                                  thread_sums[t].H1_B_grad_sum, H1_B_grad_sum);
-        kernel_vector_vector_add(L_B_grad_sum,
+        vector_vector_add(L_B_grad_sum,
                                  thread_sums[t].L_B_grad_sum,  L_B_grad_sum);
         zero_thread_sums(&thread_sums[t]);
       }
@@ -377,7 +377,7 @@ void backprop_batch(BatchScratch *s, ThreadGradSum *ts, int actual_S) {
   /* Propagate error to H1: H1_A_grad = delta_L x L_W
    * Using kernel_gemm_forward(delta_L, L_W_T, H1_A_grad) where
    * L_W_T = L_W^T  (H1_SIZE x L_SIZE), so B^T = L_W. */
-  kernel_matrix_transpose(L_W, s->BP_W_T_L);  /* computed once per batch */
+  matrix_transpose(L_W, s->BP_W_T_L);  /* computed once per batch */
   kernel_gemm_forward(s->L_delta_batch, s->BP_W_T_L,
                       s->H1_A_grad_batch, actual_S);
 
@@ -401,7 +401,7 @@ void backprop_batch(BatchScratch *s, ThreadGradSum *ts, int actual_S) {
                           ts->H1_W_grad_sum, actual_S);
 
   /* Propagate error to H0: H0_A_grad = delta_H1 x H1_W */
-  kernel_matrix_transpose(H1_W, s->BP_W_T_H1);
+  matrix_transpose(H1_W, s->BP_W_T_H1);
   kernel_gemm_forward(s->H1_delta_batch, s->BP_W_T_H1,
                       s->H0_A_grad_batch, actual_S);
 
