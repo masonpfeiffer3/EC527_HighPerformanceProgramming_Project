@@ -1,8 +1,7 @@
 # EC527_HighPerformanceProgramming_Project
 
-## References
+This codebase consists of three separate code architectures:
 
-- [Neural Networks and Deep Learning](http://neuralnetworksanddeeplearning.com/) — Michael Nielsen ([code](https://github.com/mnielsen/neural-networks-and-deep-learning)). Reference implementation for [...].
-- [Neural Networks](https://www.youtube.com/playlist?list=PLZHQObOWTQDNU6R1_67000Dx_ZCJB-3pi) — 3Blue1Brown. Conceptual foundation for the implemented algorithms.
-
-https://github.com/fgnt/mnist
+- The "optimized" folder contains our most efficient code. Navigate to the directory and compile/run on Linux systems with "make run".
+- The "serial_baseline" folder contains our code derived from first principles. Navigate to the directory and compile/run on Linux systems with "make run".
+- The "python_reference_code" folder contains code taken from Michael Nielsen's "Deep Learning and Neural Networks". Navigate to the directory/src and compile/run on Linux systems with "python3 script.py".
