@@ -28,8 +28,6 @@ void init_dataset_rand(dataset_ptr d, double low, double high);
 void copyImageToInput(dataset_ptr d, array_ptr v, long int index);
 
 // BATCH LOADER
-// Copies `count` images (selected by indices[0..count-1]) into the first
-// `count` rows of `batch` (layout: count x IMAGE_SIZE, samples as rows).
 void copyImagesToInputBatch(dataset_ptr d, matrix_ptr batch, int *indices, int count);
 
 #endif

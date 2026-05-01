@@ -23,18 +23,14 @@
 /* max samples any single thread will ever own in one batch */
 #define MAX_S ((BATCH_SIZE + NUM_THREADS - 1) / NUM_THREADS)
 
-// =====================================================================
 // SHARED (read-only during parallel region): weights and biases
-// =====================================================================
 matrix_ptr H0_W; array_ptr H0_B;
 matrix_ptr H1_W; array_ptr H1_B;
 matrix_ptr L_W;  array_ptr L_B;
 
-// =====================================================================
 // PER-THREAD batch scratch.
 // All activation and gradient buffers are now matrices of shape
 // (MAX_S x layer_size), storing one row per sample (samples-as-rows).
-// =====================================================================
 struct BatchScratch {
   /* Input batch: MAX_S x I_SIZE */
   matrix_ptr IN_batch;
@@ -78,7 +74,6 @@ static void alloc_scratch(BatchScratch *s);
 static void alloc_thread_sums(ThreadGradSum *t);
 static void zero_thread_sums(ThreadGradSum *t);
 
-// =====================================================================
 
 void parallel_MNIST(dataset_ptr train_data, dataset_ptr test_data) {
   struct timespec t0, t1;
@@ -180,7 +175,6 @@ static void zero_thread_sums(ThreadGradSum *t) {
   zero_array(t->L_B_grad_sum);
 }
 
-// =====================================================================
 
 void train_MNIST(dataset_ptr train_data) {
 
@@ -207,7 +201,7 @@ void train_MNIST(dataset_ptr train_data) {
 
     for (int i = 0; i < TRAIN_SIZE; i += BATCH_SIZE) {
 
-      /* ===== PARALLEL REGION =====
+      /* PARALLEL REGION
        * Each thread computes its own contiguous sub-batch of samples,
        * packs them into a batch matrix, runs feedforward + backprop
        * on all of them at once, and accumulates gradients into its
@@ -234,9 +228,7 @@ void train_MNIST(dataset_ptr train_data) {
         feedforward_batch(s, actual_S);
         backprop_batch(s, ts, actual_S);
       }
-      /* ===== END PARALLEL REGION (implicit barrier) ===== */
-
-      /* ===== SERIAL: combine per-thread sums into global sum ===== */
+     
       for (int t = 0; t < NUM_THREADS; t++) {
         kernel_matrix_matrix_add(H0_W_grad_sum,
                                  thread_sums[t].H0_W_grad_sum, H0_W_grad_sum);
@@ -253,7 +245,6 @@ void train_MNIST(dataset_ptr train_data) {
         zero_thread_sums(&thread_sums[t]);
       }
 
-      /* ===== SERIAL: scale and apply to weights/biases ===== */
       data_t scale = -(data_t)LEARN_RATE / BATCH_SIZE;
 
       kernel_matrix_saxpy(H0_W_grad_sum, scale, H0_W);
@@ -276,7 +267,6 @@ void train_MNIST(dataset_ptr train_data) {
   free(indices);
 }
 
-// =====================================================================
 
 void test_MNIST(dataset_ptr test_data) {
   /* Test runs serially using a single-sample feedforward path.
@@ -310,7 +300,6 @@ void test_MNIST(dataset_ptr test_data) {
          correct, TEST_SIZE, accuracy * 100);
 }
 
-// =====================================================================
 
 void feedforward_batch(BatchScratch *s, int actual_S) {
 
@@ -337,7 +326,6 @@ void feedforward_batch(BatchScratch *s, int actual_S) {
   kernel_matrix_copy_rows(s->L_mm_res, s->OUT_batch, actual_S);
 }
 
-// =====================================================================
 
 void backprop_batch(BatchScratch *s, ThreadGradSum *ts, int actual_S) {
 
@@ -346,9 +334,7 @@ void backprop_batch(BatchScratch *s, ThreadGradSum *ts, int actual_S) {
   long int cols_H0 = H0_SIZE;
   long int cols_IN = I_SIZE;
 
-  /* ------------------------------------------------------------------
-   * OUTPUT LAYER
-   * ------------------------------------------------------------------ */
+   //OUTPUT LAYER
 
   /* delCdelA_L = OUT_batch - e_num  (copy OUT, subtract 1 at label col) */
   kernel_matrix_copy_rows(s->OUT_batch, s->BP_delCdelA_L_batch, actual_S);
@@ -380,9 +366,7 @@ void backprop_batch(BatchScratch *s, ThreadGradSum *ts, int actual_S) {
   kernel_gemm_forward(s->L_delta_batch, s->BP_W_T_L,
                       s->H1_A_grad_batch, actual_S);
 
-  /* ------------------------------------------------------------------
-   * HIDDEN LAYER 1
-   * ------------------------------------------------------------------ */
+   //HIDDEN LAYER 1
 
   /* delAdelZ_H1 = sigmoid'(H1_Z_batch) */
   kernel_matrix_copy_rows(s->H1_Z_batch, s->BP_delAdelZ_H1_batch, actual_S);
@@ -404,9 +388,7 @@ void backprop_batch(BatchScratch *s, ThreadGradSum *ts, int actual_S) {
   kernel_gemm_forward(s->H1_delta_batch, s->BP_W_T_H1,
                       s->H0_A_grad_batch, actual_S);
 
-  /* ------------------------------------------------------------------
-   * HIDDEN LAYER 0
-   * ------------------------------------------------------------------ */
+  //HIDDEN LAYER 0
 
   /* delAdelZ_H0 = sigmoid'(H0_Z_batch) */
   kernel_matrix_copy_rows(s->H0_Z_batch, s->BP_delAdelZ_H0_batch, actual_S);

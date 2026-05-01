@@ -12,7 +12,7 @@ HDR = src/mnist_loader.h \
       src/array_matrix_funcs.h \
       src/array_matrix_math.h \
       src/kernels.h
-TARGET = mnist_c #executable name
+TARGET = optimized #executable name
 
 all: $(TARGET)
 #currently avoiding any optimizations by the compiler

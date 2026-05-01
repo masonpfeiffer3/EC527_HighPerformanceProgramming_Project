@@ -6,9 +6,8 @@
 #include "array_matrix_funcs.h"
 
 
-// =====================================================================
+
 // MATRIX
-// =====================================================================
 
 matrix_ptr new_matrix(long int rows, long int cols)
 {
@@ -74,9 +73,7 @@ int zero_matrix(matrix_ptr m)
 data_t *get_matrix_start(matrix_ptr m) { return m->data; }
 
 
-// =====================================================================
 // ARRAY
-// =====================================================================
 
 array_ptr new_array(long int len)
 {
@@ -139,9 +136,7 @@ int zero_array(array_ptr m)
 }
 
 
-// =====================================================================
 // DATASET
-// =====================================================================
 
 dataset_ptr new_dataset(long int len, long int image_len)
 {
@@ -181,11 +176,7 @@ void copyImageToInput(dataset_ptr d, array_ptr v, long int index)
     v->data[i] = d->image_arr[i + index*image_len];
 }
 
-// =====================================================================
 // BATCH LOADER
-// Copies `count` images (by indices[0..count-1]) as contiguous rows
-// into `batch`.  Layout: batch[s * IMAGE_SIZE + j] = pixel j of sample s.
-// =====================================================================
 
 void copyImagesToInputBatch(dataset_ptr d, matrix_ptr batch, int *indices, int count)
 {

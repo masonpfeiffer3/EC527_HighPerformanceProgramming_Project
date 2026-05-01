@@ -6,9 +6,7 @@
 #define AVX_STRIDE   8          /* floats per 256-bit register           */
 #define AVX_STRIDE_6 48         /* 6 * AVX_STRIDE: floats per unrolled iter */
 
-// =====================================================================
 // Existing kernels — carried over from serial unchanged
-// =====================================================================
 
 int kernel_matrix_vector_mult(matrix_ptr m, array_ptr v, array_ptr v_out) {
 
@@ -316,9 +314,7 @@ int kernel_vector_saxpy(array_ptr grad, data_t scale, array_ptr b) {
 
 
 
-// =====================================================================
 // New batch kernels
-// =====================================================================
 
 /* hsum256 — horizontal sum of an __m256 register to a scalar. */
 static inline data_t hsum256(__m256 v) {
