@@ -1,5 +1,5 @@
 # High-Performance Machine Learning - *High-Performance Programming Course Project*
-![game of life main image](https://github.com/ibyteibit/Game-of-Life/blob/main/pics/GameofLife.png)
+![HPP main image](https://github.com/masonpfeiffer3/EC527_HighPerformanceProgramming_Project/blob/main/pics/titleimage.png)
 <br></br>
 **Project Dates:** Apr - May 2026
 
