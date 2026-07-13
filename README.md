@@ -4,15 +4,18 @@
 **Project Dates:** Apr - May 2026
 
 ## Description
-- An interactive adaptation of Conway’s Game of Life
-- A variety of simulation tools are available to the user including zoom/pan, animated coordinate find, autozoom, speed adjustment, random cell generation, live statistics, and a maximizable 1000x1000 grid
-- Users can customize colorful “species” with specified rules for survival and mutation
-- Pre-programmed pattern templates, like gliders and oscillators, are also at the user’s disposal
-### Add Species Menu & Template Menu
-![species image](https://github.com/ibyteibit/Game-of-Life/blob/main/pics/Species.png) ![template image](https://github.com/ibyteibit/Game-of-Life/blob/main/pics/Templates.png)
+- A highly-optimized Multilayer Perceptron (MLP) neural network built to classify grayscale handwritten digits
+- Optimizations achieved a **156X** training + testing speedup over the serial baseline while maintaining a classification accuracy of **96.57%**
+- The MLP was written in C, contained 4 layers + 80,000 parameters, and was optimized for the Intel i9-14900
+- Optimizations included loop unrolling, AVX vectorization, OpenMP multithreading, and matrix operation fusion
 
 ## Tools
-- EclipseIDE
+- Resources: 3Blue1Brown + Michael Nielsen's *Neural Networks and Deep Learning*
+- Coding & Compiling: VSCode + GCC
+- Optimization libraries: Intel AVX Vector extension + OpenMP Multithreading
+- Claude Code
+
+
 ## Methodology
 - Researched extensively Java Swing classes and GridBagLayout to program the UI
 - Developed the grid rendering and zoom/pan functions from scratch through much trial and error
@@ -20,8 +23,10 @@
 - Managed ArrayLists for Parent and Child species with code to decide what species to place in a cell and to allow for editing/deleting species
 - Designed my own buttons (DevButtons) built on JPanels that fade between colors on hover
 - Accounted for fractional values in graphics with a double-to-int converter that takes a loop index input
-### Class Heirarchy
+
+## Results
 ![class heirarchy](https://github.com/ibyteibit/Game-of-Life/blob/main/pics/ClassHeirarchy.png)
+
 ## Build Instructions
 This codebase consists of three separate code architectures:
 
