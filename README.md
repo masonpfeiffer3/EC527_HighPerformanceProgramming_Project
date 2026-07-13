@@ -9,6 +9,7 @@
 - The MLP was written in C, contained 4 layers + 80,000 parameters, and was optimized for the Intel i9-14900
 - Optimizations included loop unrolling, AVX vectorization, OpenMP multithreading, and matrix operation fusion
 - **Full report in repo root**
+
 ![HPP MLP image](https://github.com/masonpfeiffer3/EC527_HighPerformanceProgramming_Project/blob/main/pics/network.png)
 
 ## Tools
