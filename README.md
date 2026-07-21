@@ -32,6 +32,6 @@
 ## Build Instructions
 This codebase consists of three separate code architectures:
 
-- The "optimized" folder contains our most efficient code. Navigate to the directory and compile/run on Linux systems with "make run".
-- The "serial_baseline" folder contains our code derived from first principles. Navigate to the directory and compile/run on Linux systems with "make run".
-- The "python_reference_code" folder contains code taken from Michael Nielsen's "Deep Learning and Neural Networks". Navigate to the directory/src and compile/run on Linux systems with "python3 script.py".
+- [optimized](https://github.com/masonpfeiffer3/EC527_HighPerformanceProgramming_Project/tree/main/optimized) contains our most efficient code. Navigate to the directory and compile/run on Linux systems with "make run".
+- [serial_baseline](https://github.com/masonpfeiffer3/EC527_HighPerformanceProgramming_Project/tree/main/serial_baseline) contains our code derived from first principles. Navigate to the directory and compile/run on Linux systems with "make run".
+- [python_reference_code](https://github.com/masonpfeiffer3/EC527_HighPerformanceProgramming_Project/tree/main/python_reference_code) contains the neural network from Michael Nielsen's "Deep Learning and Neural Networks". Navigate to the directory/src and compile/run on Linux systems with "python3 script.py".
